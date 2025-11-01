@@ -9,21 +9,19 @@ class calendarClient:
         self.service = None
 
     def get_service(self):
+        """Create or get Google Calendar API service."""
         if not self.service:
             creds = self.auth.load_credentials()
             if not creds:
-                print("❌ No valid credentials found in client.")
+                print("[DEBUG] No valid credentials loaded.")
                 return None
-
             try:
                 self.service = build('calendar', 'v3', credentials=creds)
-                print("✅ Google Calendar service built successfully.")
+                print("[DEBUG] Calendar API service built successfully.")
             except Exception as e:
-                print(f"❌ Failed to build service: {e}")
+                print(f"Failed to build service: {str(e)}")
                 return None
-
         return self.service
-
 
     def is_authenticated(self):
         return self.auth.is_authenticated()
@@ -35,8 +33,9 @@ class calendarClient:
             if not service:
                 return {"error": "Not Authenticated"}
 
-            now = datetime.utcnow().isoformat() + 'Z'
-            end_time = (datetime.utcnow() + timedelta(hours=hours_ahead)).isoformat() + 'Z'
+            # ✅ FIXED: Use timezone-aware datetime
+            now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+            end_time = (datetime.now(timezone.utc) + timedelta(hours=hours_ahead)).isoformat().replace('+00:00', 'Z')
 
             events_result = service.events().list(
                 calendarId='primary',
@@ -66,13 +65,14 @@ class calendarClient:
             if not service:
                 return {"error": "Not Authenticated"}
 
-            today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            # ✅ FIXED: Use timezone-aware datetime
+            today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
             tomorrow = today + timedelta(days=1)
 
             events_result = service.events().list(
                 calendarId='primary',
-                timeMin=today.isoformat() + 'Z',
-                timeMax=tomorrow.isoformat() + 'Z',
+                timeMin=today.isoformat().replace('+00:00', 'Z'),
+                timeMax=tomorrow.isoformat().replace('+00:00', 'Z'),
                 singleEvents=True,
                 orderBy='startTime'
             ).execute()
@@ -94,7 +94,9 @@ class calendarClient:
             if not service:
                 return {"error": "Not authenticated"}
 
-            now = datetime.utcnow().isoformat() + 'Z'
+            # ✅ FIXED: Use timezone-aware datetime
+            now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+            
             events_result = service.events().list(
                 calendarId='primary',
                 timeMin=now,
@@ -128,7 +130,9 @@ class calendarClient:
             else:  # All-day event
                 event_dt = datetime.fromisoformat(event_time)
 
-            now = datetime.utcnow().replace(tzinfo=timezone.utc)
+            # ✅ FIXED: Use timezone-aware datetime
+            now = datetime.now(timezone.utc)
+            
             delta = event_dt - now
             return int(delta.total_seconds() / 60)
         except Exception as e:
@@ -136,6 +140,7 @@ class calendarClient:
             return None
 
     def format_events(self, events):
+        """Format multiple events."""
         return [self.format_event(e) for e in events]
 
     def format_event(self, event):
