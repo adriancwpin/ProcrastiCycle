@@ -7,7 +7,7 @@ function App() {
   const spotify_click = async () => {
     setStatus('Authorizing...');
     try {
-      const res = await fetch("http://127.0.0.1:5000/open_spotify");
+      const res = await fetch("http://127.0.0.1:8888/open_spotify");
       if (res.ok) {
         setStatus('Opening Spotify...');
       } else {
@@ -22,9 +22,13 @@ function App() {
   return (
     <div className="popup">
       <h1>Procrastination Police 👮‍♀️</h1>
+
       <div className="factor" onClick={spotify_click}>
         <h2>Spotify</h2>
-        <p>Click to authorize Spotify</p>
+      </div>
+
+      <div className="factor" onClick={() => alert('You clicked YouTube!')}>
+        <h2>Google Calendar</h2>
       </div>
       {status && <p>{status}</p>}
     </div>
