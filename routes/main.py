@@ -16,7 +16,7 @@ def start_auth():
     return jsonify({"message": "Opened Spotify auth URL", "url": auth_url})
 
 
-@app.route('/callback', methods=['GET'] )
+@app.route('/callback', methods=['GET'])
 def callback():
     code = request.args.get('code')
     error = request.args.get('error')
@@ -56,3 +56,8 @@ def callback():
         """
     else:
         return "<h1>Failed to get token</h1>", 400
+
+
+if __name__ == '__main__':
+    print("Starting Flask server on http://127.0.0.1:8888")
+    app.run(host='127.0.0.1', port=8888, debug=True)
