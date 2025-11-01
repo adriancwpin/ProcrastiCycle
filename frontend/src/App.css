@@ -41,15 +41,57 @@
   color: #888;
 }
 
-.factor{
-  flex: 1; /* make boxes equal width */
-  border: 2px solid black;
-  border-radius: 10px;
-  padding: 20px;
-  cursor: pointer;
+.popup {
   text-align: center;
-
-  display: flex;
-  gap: 20px; /* space between boxes */
-  justify-content: center; /* center horizontally */
+  padding: 2rem;
 }
+
+.factor {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background-color: #f0f0f0;
+  border-radius: 12px;
+  padding: 1rem 2rem;
+  margin: 1rem auto;
+  width: 250px;           /* fixed width */
+  height: 120px;          /* fixed height */
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-sizing: border-box; /* includes padding in width/height */
+}
+
+.factor:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.factor h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+@keyframes blurOutDisappear {
+  0% {
+    filter: blur(0);
+    transform: skew(0deg);
+    opacity: 1;
+  }
+  50% {
+    filter: blur(20px);
+    opacity: 1;
+  }
+  100% {
+    filter: blur(20px);
+    opacity: 0;
+  }
+}
+
+.factor.fade-out {
+  animation: blurOutDisappear 2s forwards;
+  pointer-events: none;
+}
+
+
+
