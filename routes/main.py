@@ -39,7 +39,7 @@ def callback():
     if not code:
         return "<h1>No code received</h1>", 400
     
-    # Exchange code for token using your function
+    # Exchange code for token using your functions
     token = auth.get_token_from_code(code)
     
     if token:
