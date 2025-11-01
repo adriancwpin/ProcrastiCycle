@@ -1,0 +1,19 @@
+{
+    "manifest_version": 3,
+    "version": "1.0.0",
+    "name": "Procrastination Police",
+    "action": {
+        "default_popup": "index.html"
+    },
+    "permissions":[
+        "tabs", 
+        "storage", 
+        "identity",
+        "alarms",
+        "activeTab"
+    ],
+    "host_permissions": [
+        "http://*/*",
+        "https://*/*"
+    ]
+}

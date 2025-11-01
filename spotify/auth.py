@@ -142,21 +142,21 @@ def get_client_token():
 #list_available_models()
 
 # Step 1: Get authorization URL
-auth_url = get_auth_url()
-print("Please visit this URL to authorize the app:")
-print(auth_url)
-webbrowser.open(auth_url)  # Opens browser automatically
+#auth_url = get_auth_url()
+#print("Please visit this URL to authorize the app:")
+#print(auth_url)
+#webbrowser.open(auth_url)  # Opens browser automatically
 
 # Step 2: User will be redirected to redirect_uri with a code parameter
-print("\nAfter authorizing, copy the 'code' parameter from the URL")
-print("Example: http://localhost:8888/callback?code=XXXXXXXX")
-auth_code = input("\nPaste the authorization code here: ")
+#print("\nAfter authorizing, copy the 'code' parameter from the URL")
+#print("Example: http://localhost:8888/callback?code=XXXXXXXX")
+#auth_code = input("\nPaste the authorization code here: ")
 
 # Step 3: Exchange code for access token
-token = get_token_from_code(auth_code)
+#token = get_token_from_code(auth_code)
 
 
-if token:
+#if token:
     print("\nAccess Token obtained successfully!")
     print(f"Token: {token[:20]}...")
     
