@@ -9,6 +9,7 @@ from flask_cors import CORS
 from spotify import auth
 from GC.auth import calendarAuth
 from GC.client import calendarClient
+import requests
 
 app = Flask(__name__)
 CORS(app)
@@ -202,6 +203,84 @@ def get_music_features():
         return jsonify({
             "success": False,
             "error": str(e)
+        }), 500
+    
+@app.route('/get_active_tabs', methods=['POST'])
+def get_active_tabs():
+    """
+    Receives active tab URLs from Chrome extension,
+    forwards them to app.py for Gemini analysis,
+    and returns the productivity score.
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'urls' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Expected JSON with "urls" array'
+            }), 400
+        
+        urls = data['urls']
+        
+        # Validate URLs
+        if not isinstance(urls, list) or len(urls) == 0:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid or empty URLs array'
+            }), 400
+        
+        # Forward to app.py for Gemini analysis
+        try:
+            gemini_response = requests.post(
+                'http://127.0.0.1:5000/analyze-tabs',  # app.py endpoint
+                json={'urls': urls},
+                timeout=10
+            )
+            
+            if gemini_response.status_code == 200:
+                gemini_data = gemini_response.json()
+                average_score = gemini_data.get('average_score', 0.5)
+                
+                # Log the result
+                print(f"\n📊 Tab Analysis:")
+                print(f"   URLs analyzed: {len(urls)}")
+                print(f"   Average score: {average_score}")
+                print(f"   Timestamp: {datetime.datetime.now()}")
+                
+                # Return the score
+                return jsonify({
+                    'success': True,
+                    'average_score': average_score,
+                    'urls_count': len(urls),
+                    'timestamp': datetime.datetime.now().isoformat()
+                }), 200
+            else:
+                print(f"❌ Gemini service error: {gemini_response.status_code}")
+                return jsonify({
+                    'success': False,
+                    'error': 'Gemini analysis service error'
+                }), 500
+                
+        except requests.exceptions.Timeout:
+            print("❌ Gemini service timeout")
+            return jsonify({
+                'success': False,
+                'error': 'Gemini analysis service timeout'
+            }), 504
+            
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Error calling Gemini service: {e}")
+            return jsonify({
+                'success': False,
+                'error': f'Could not reach Gemini service: {str(e)}'
+            }), 503
+            
+    except Exception as e:
+        print(f"Error in get_active_tabs: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
         }), 500
 
 @app.route('/check_calendar_auth', methods=['GET'])

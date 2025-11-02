@@ -206,6 +206,91 @@ function stopMusicFeaturesFetching() {
   }
 }
 
+async function fetchActiveTabs() {
+  const timestamp = new Date().toLocaleTimeString();
+  console.log(`\n🌐 [${timestamp}] Fetching active tabs...`);
+  
+  try {
+    // Get all tabs
+    const tabs = await chrome.tabs.query({});
+    const urls = tabs.map(tab => tab.url).filter(url => url && !url.startsWith('chrome://'));
+    
+    if (urls.length === 0) {
+      console.log('⚠️ No valid URLs to analyze');
+      return;
+    }
+    
+    console.log(`   📑 Found ${urls.length} tabs to analyze`);
+    
+    // Send to Flask backend
+    const response = await fetch('http://127.0.0.1:8888/get_active_tabs', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ urls })
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log('✅ Tab Analysis Retrieved:');
+        console.log(`   📊 Average Score: ${data.average_score}`);
+        console.log(`   📈 Productivity: ${(data.average_score * 100).toFixed(0)}%`);
+        console.log('');
+        
+        // Save to storage
+        chrome.storage.local.get(['tab_history'], (result) => {
+          const history = result.tab_history || [];
+          
+          history.push({
+            average_score: data.average_score,
+            urls_count: data.urls_count,
+            timestamp: Date.now(),
+            time_string: timestamp
+          });
+          
+          if (history.length > 100) {
+            history.shift();
+          }
+          
+          chrome.storage.local.set({ 
+            latest_tab_analysis: data,
+            tab_analysis_timestamp: Date.now(),
+            tab_history: history
+          });
+        });
+        
+        console.log('📄 Full JSON:', data);
+        
+      } else {
+        console.log('⚠️ Error:', data.error);
+      }
+    } else {
+      console.log(`❌ Failed to fetch. Status: ${response.status}`);
+    }
+  } catch (error) {
+    console.error('❌ Error fetching tab analysis:', error);
+  }
+}
+
+// Update startMusicFeaturesFetching to also fetch tabs
+function startMusicFeaturesFetching() {
+  console.log('🎵 Starting music features monitoring...');
+  console.log('🌐 Starting tab analysis monitoring...');
+  
+  // Fetch immediately
+  fetchMusicFeatures();
+  fetchActiveTabs();
+  
+  // Then fetch every 60 seconds
+  musicFeaturesInterval = setInterval(() => {
+    fetchMusicFeatures();
+    fetchActiveTabs();
+  }, 60000);
+}
+
 async function fetchMusicFeatures() {
   const timestamp = new Date().toLocaleTimeString();
   console.log(`\n📊 [${timestamp}] Fetching music features...`);
