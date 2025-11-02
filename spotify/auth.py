@@ -1,3 +1,4 @@
+import time
 from dotenv import load_dotenv
 import os
 import base64
@@ -52,6 +53,7 @@ Return ONLY a valid JSON object with these exact keys, no other text or explanat
     except Exception as e:
         print(f"Error analyzing with Gemini: {e}")
         print(f"Response was: {response.text if 'response' in locals() else 'No response'}")
+        time.sleep(60)
         return None
     
 def list_available_models():

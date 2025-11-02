@@ -14,7 +14,8 @@
         "identity",
         "alarms",
         "activeTab",
-        "webNavigation"
+        "webNavigation",
+        "notifications"
     ],
     "host_permissions": [
         "http://*/*",

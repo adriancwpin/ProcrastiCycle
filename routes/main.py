@@ -1,5 +1,6 @@
 import sys
 import os
+import time
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import datetime
@@ -89,6 +90,7 @@ Example: 0.73"""
         
     except Exception as e:
         print(f"❌ Gemini error: {e}")
+        time.sleep(5)
         return 0.5
 
 
@@ -218,54 +220,46 @@ def get_track_info():
             "authenticated": False
         }), 500
     
+
+last_analyzed_track = {"id": None, "features": None, "timestamp": 0}
+
 @app.route('/get_music_features', methods=['GET'])
 def get_music_features():
+    global last_analyzed_track
+    
     if 'token' not in auth_storage:
         return jsonify({"error": "Not authenticated"}), 401
-    
+
     token = auth_storage['token']
+    currently_playing = auth.get_currently_playing(token)
 
-    try: 
-        currently_playing = auth.get_currently_playing(token)
+    if not currently_playing or "item" not in currently_playing:
+        return jsonify({"success": False, "error": "No track currently playing"}), 404
 
-        if currently_playing and "item" in currently_playing:
-            track = currently_playing["item"]
+    track = currently_playing["item"]
+    track_id = track["id"]
 
-            # Get AI-generated features
-            music_features = auth.analyze_track_with_gemini(
-                track['name'], 
-                track['artists'][0]['name']
-            )
+    # 🔹 Only call Gemini if track changed or cache expired
+    if (last_analyzed_track["id"] != track_id or 
+        time.time() - last_analyzed_track["timestamp"] > 1800):  # 30 min cache
+        print(f"🎵 New track detected, analyzing with Gemini: {track['name']}")
+        features = auth.analyze_track_with_gemini(track["name"], track["artists"][0]["name"])
+        last_analyzed_track = {
+            "id": track_id,
+            "features": features,
+            "timestamp": time.time()
+        }
+    else:
+        print(f"♻️ Using cached Gemini features for {track['name']}")
+        features = last_analyzed_track["features"]
 
-            if music_features:
-                # Return ONLY the requested features
-                return jsonify({
-                    "success": True,
-                    "track_name": track['name'],
-                    "artist": track['artists'][0]['name'],
-                    "features": {
-                        "danceability": music_features.get('danceability', 0),
-                        "tempo": music_features.get('tempo', 0),
-                        "energy": music_features.get('energy', 0)
-                    }
-                }), 200
-            else:
-                return jsonify({
-                    "success": False,
-                    "error": "Could not generate music features"
-                }), 500
-        else:
-            return jsonify({
-                "success": False,
-                "error": "No track currently playing"
-            }), 404
-            
-    except Exception as e:
-        print(f"Error in get_music_features: {e}")
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+    return jsonify({
+        "success": True,
+        "track_name": track['name'],
+        "artist": track['artists'][0]['name'],
+        "features": features
+    }), 200
+
     
 @app.route('/get_active_tabs', methods=['POST'])
 def get_active_tabs():

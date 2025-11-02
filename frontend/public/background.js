@@ -120,7 +120,7 @@ async function startSession() {
   if (chrome.notifications) {
     chrome.notifications.create({
       type: 'basic',
-      iconUrl: 'icons/icon48.png',
+      iconUrl: 'icon.png',
       title: 'Session Started',
       message: 'Monitoring your productivity! 🎵'
     });
@@ -175,7 +175,7 @@ async function stopSession() {
   if (chrome.notifications) {
     chrome.notifications.create({
       type: 'basic',
-      iconUrl: 'icons/icon48.png',
+      iconUrl: 'icon.png',
       title: 'Session Ended',
       message: `Great work! Session lasted ${minutes} minutes. 🎉`
     });
@@ -617,7 +617,7 @@ async function makeProcrastinationPrediction() {
         if (isProcrastinating && chrome.notifications) {
           chrome.notifications.create({
             type: 'basic',
-            iconUrl: 'icons/icon48.png',
+            iconUrl: 'icon.png',
             title: '🚨 Procrastination Alert!',
             message: `${(prediction * 100).toFixed(0)}% chance you're procrastinating! Get back to work!`,
             priority: 2
