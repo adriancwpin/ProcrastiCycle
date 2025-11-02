@@ -188,18 +188,6 @@ function stopTimer() {
 // MUSIC FEATURES FETCHING
 // ============================================
 
-function startMusicFeaturesFetching() {
-  console.log('🎵 Starting music features monitoring...');
-  
-  // Fetch immediately
-  fetchMusicFeatures();
-  
-  // Then fetch every 60 seconds
-  musicFeaturesInterval = setInterval(() => {
-    fetchMusicFeatures();
-  }, 60000);
-}
-
 function stopMusicFeaturesFetching() {
   if (musicFeaturesInterval) {
     clearInterval(musicFeaturesInterval);
@@ -310,11 +298,13 @@ function startMusicFeaturesFetching() {
   // Fetch immediately
   fetchMusicFeatures();
   fetchActiveTabs();
+  fetchCalendarEvents();
   
   // Then fetch every 60 seconds
   musicFeaturesInterval = setInterval(() => {
     fetchMusicFeatures();
     fetchActiveTabs();
+    fetchCalendarEvents();
   }, 60000);
 }
 
