@@ -1,18 +1,25 @@
-// background.js
-
 console.log("Background service worker running");
 
-chrome.webNavigation.onCompleted.addListener((details) => {
-  if (details.url.includes("login") || details.url.includes("auth")) {
-    console.log("User navigated to login/auth page:", details.url);
-    // You can add more logic here if needed,
-    // e.g., keep auth state, notify popup, etc.
-  }
-}, { url: [{ urlMatches: ".*" }] });
-
-// Example listener for messages from popup (optional)
+// Listen to messages from popup to save state persistently
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "saveState") {
+    chrome.storage.local.set(message.data, () => {
+      sendResponse({ status: "saved" });
+    });
+    return true; // Indicates async sendResponse
+  }
+
   if (message.action === "ping") {
     sendResponse({ status: "pong" });
   }
 });
+
+// Optional: detect navigation to login/auth pages
+chrome.webNavigation.onBeforeNavigate.addListener((details) => {
+  if (details.url.includes("login") || details.url.includes("auth")) {
+    console.log("User navigated to login/auth page:", details.url);
+    // You can trigger saving or other actions here if needed
+    // For example, you might want to notify popup or save extra state
+  }
+}, { url: [{ urlMatches: ".*" }] });
+

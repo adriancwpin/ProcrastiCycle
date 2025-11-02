@@ -19,37 +19,27 @@ function App() {
   // Stopwatch states
   const [isRunning, setIsRunning] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-
   const timerRef = useRef<number | null>(null);
 
-  // Load all saved states from chrome storage on mount
+  // Load visibility & stopwatch states on mount, calculate elapsedSeconds if running
   useEffect(() => {
     chrome.storage.local.get(
-      [
-        "spotifyVisible",
-        "calendarVisible",
-        "stopwatchRunning",
-        "elapsedSeconds",
-        "stopwatchLastTimestamp",
-      ],
+      ["spotifyVisible", "calendarVisible", "isRunning", "startTimestamp", "elapsedSeconds"],
       (result: any) => {
         setSpotifyVisible(result.spotifyVisible !== false);
         setCalendarVisible(result.calendarVisible !== false);
 
-        // Load elapsed time
-        let savedElapsed = result.elapsedSeconds ?? 0;
-
-        // If stopwatch was running, calculate elapsed time including offline time
-        if (result.stopwatchRunning) {
-          const lastTimestamp = result.stopwatchLastTimestamp ?? Date.now();
-          const now = Date.now();
-          const diffSeconds = Math.floor((now - lastTimestamp) / 1000);
-          savedElapsed += diffSeconds;
+        if (result.isRunning && result.startTimestamp) {
           setIsRunning(true);
-          setElapsedSeconds(savedElapsed);
+
+          // Calculate elapsed seconds from stored startTimestamp
+          const now = Date.now();
+          const elapsed = Math.floor((now - result.startTimestamp) / 1000);
+          setElapsedSeconds(elapsed);
         } else {
+          // Not running, use stored elapsedSeconds or 0
           setIsRunning(false);
-          setElapsedSeconds(savedElapsed);
+          setElapsedSeconds(result.elapsedSeconds || 0);
         }
       }
     );
@@ -65,45 +55,22 @@ function App() {
       // Reset stopwatch if you want on re-showing boxes
       setIsRunning(false);
       setElapsedSeconds(0);
-      // Also clear stored stopwatch state when boxes reappear
-      chrome.storage.local.set({
-        stopwatchRunning: false,
-        elapsedSeconds: 0,
-        stopwatchLastTimestamp: null,
-      });
+      // Clear startTimestamp from storage since timer reset
+      chrome.storage.local.remove(["startTimestamp", "elapsedSeconds", "isRunning"]);
     }
   }, [spotifyVisible, calendarVisible]);
 
-  // Stopwatch timer effect
+  // Stopwatch timer effect to update elapsedSeconds every second
   useEffect(() => {
     if (isRunning) {
-      // Save start time
-      chrome.storage.local.set({
-        stopwatchRunning: true,
-        stopwatchLastTimestamp: Date.now(),
-        elapsedSeconds,
-      });
-
       timerRef.current = window.setInterval(() => {
-        setElapsedSeconds((prev) => {
-          const newVal = prev + 1;
-          // Save updated elapsed time every second
-          chrome.storage.local.set({ elapsedSeconds: newVal, stopwatchLastTimestamp: Date.now() });
-          return newVal;
-        });
+        setElapsedSeconds((prev) => prev + 1);
       }, 1000);
-    } else {
-      if (timerRef.current !== null) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-      // Save stopped state
-      chrome.storage.local.set({
-        stopwatchRunning: false,
-        stopwatchLastTimestamp: null,
-        elapsedSeconds,
-      });
+    } else if (timerRef.current !== null) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
+
     return () => {
       if (timerRef.current !== null) {
         clearInterval(timerRef.current);
@@ -111,26 +78,29 @@ function App() {
     };
   }, [isRunning]);
 
-  // Format seconds into mm:ss
-  const formatTime = (totalSeconds: number) => {
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes.toString().padStart(2, "0")}:${seconds
-      .toString()
-      .padStart(2, "0")}`;
-  };
+  // Save visibility states whenever they change
+  useEffect(() => {
+    chrome.storage.local.set({
+      spotifyVisible,
+      calendarVisible,
+    });
+  }, [spotifyVisible, calendarVisible]);
 
-  const handleStartClick = () => {
-    setIsRunning(true);
-    setStatus("Stopwatch started");
-  };
+  // Save stopwatch state whenever isRunning or elapsedSeconds changes
+  useEffect(() => {
+    if (isRunning) {
+      // Save startTimestamp and isRunning
+      const startTimestamp = Date.now() - elapsedSeconds * 1000;
+      chrome.storage.local.set({ startTimestamp, isRunning: true });
+    } else {
+      // Save elapsedSeconds and isRunning false
+      chrome.storage.local.set({ elapsedSeconds, isRunning: false });
+      // Remove startTimestamp if stopped
+      chrome.storage.local.remove("startTimestamp");
+    }
+  }, [isRunning, elapsedSeconds]);
 
-  const handleStopClick = () => {
-    setIsRunning(false);
-    setStatus("Stopwatch stopped");
-  };
-
- const spotify_click = async () => {
+  const spotify_click = async () => {
     setStatus("Authorizing Spotify...");
     try {
       const res = await fetch("http://127.0.0.1:8888/open_spotify");
@@ -170,14 +140,24 @@ function App() {
     }
   };
 
-  // Send test message to background on mount (optional)
-  useEffect(() => {
-    if (chrome?.runtime?.sendMessage) {
-      chrome.runtime.sendMessage({ action: "ping" }, (response: any) => {
-        console.log("Background response:", response);
-      });
-    }
-  }, []);
+  // Format seconds into mm:ss
+  const formatTime = (totalSeconds: number) => {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes.toString().padStart(2, "0")}:${seconds
+      .toString()
+      .padStart(2, "0")}`;
+  };
+
+  const handleStartClick = () => {
+    setIsRunning(true);
+    setStatus("Stopwatch started");
+  };
+
+  const handleStopClick = () => {
+    setIsRunning(false);
+    setStatus("Stopwatch stopped");
+  };
 
   return (
     <div className="popup">
@@ -222,4 +202,3 @@ function App() {
 }
 
 export default App;
-
