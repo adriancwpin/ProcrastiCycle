@@ -4,6 +4,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
 import os
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 import json
 
 
@@ -13,7 +14,7 @@ class calendarAuth:
         self.credentials = 'credentials.json'
         self.scopes = ['https://www.googleapis.com/auth/calendar.events.readonly']  
         self.token = 'token.json'
-        self.redirect_uri = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:8000/api/calendar/callback')
+        self.redirect_uri = os.getenv('GOOGLE_REDIRECT_URI', 'http://127.0.0.1:8888/calendar/callback')
 
     def get_auth_url(self):
         """Call when the user clicks 'Connect Calendar'"""
@@ -43,7 +44,7 @@ class calendarAuth:
             
         except Exception as e:
             return {"error": f"Failed to generate an authorized URL: {str(e)}"}
-    
+
     def handle_callback(self, authorization_response):
         """Handle OAuth callback and exchange code for credentials"""
         try:
