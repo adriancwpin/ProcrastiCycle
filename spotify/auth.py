@@ -30,7 +30,7 @@ Provide the following metrics as numbers between 0.0 and 1.0:
 - tempo: Estimated BPM (beats per minute) as a number between 60-200
 
 Return ONLY a valid JSON object with these exact keys, no other text or explanation:
-{{"energy": 0.0, "danceability": 0.0, "valence": 0.0, "acousticness": 0.0, "instrumentalness": 0.0, "tempo": 120}}"""
+{{"energy": 0.0, "danceability": 0.0, "tempo": 120}}"""
 
     try:
         model = genai.GenerativeModel('gemini-2.5-flash')
