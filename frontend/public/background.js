@@ -2,6 +2,8 @@ console.log("🎯 Background service worker running");
 
 let sessionActive = false;
 let musicFeaturesInterval = null;
+let timerInterval = null;
+let sessionStartTime = null;
 
 // Listen to messages from popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -10,7 +12,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.storage.local.set(message.data, () => {
       sendResponse({ status: "saved" });
     });
-    return true; // Indicates async sendResponse
+    return true;
   }
 
   // Original ping functionality
@@ -33,9 +35,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   
   if (message.action === 'getSessionStatus') {
-    sendResponse({ 
-      active: sessionActive,
-      timestamp: Date.now()
+    chrome.storage.local.get(['session_active', 'session_start_time', 'elapsed_seconds'], (result) => {
+      let currentElapsed = result.elapsed_seconds || 0;
+      
+      // Calculate current elapsed time if session is running
+      if (result.session_active && result.session_start_time) {
+        const now = Date.now();
+        currentElapsed = Math.floor((now - result.session_start_time) / 1000);
+      }
+      
+      sendResponse({ 
+        active: result.session_active || false,
+        elapsed_seconds: currentElapsed,
+        session_start_time: result.session_start_time
+      });
     });
     return true;
   }
@@ -57,7 +70,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // ============================================
-// SESSION MANAGEMENT
+// SESSION MANAGEMENT WITH TIMER
 // ============================================
 
 function startSession() {
@@ -68,11 +81,17 @@ function startSession() {
   
   console.log('🚀 Starting session...');
   sessionActive = true;
+  sessionStartTime = Date.now();
   
+  // Save to storage
   chrome.storage.local.set({ 
     session_active: true,
-    session_start_time: Date.now()
+    session_start_time: sessionStartTime,
+    elapsed_seconds: 0
   });
+  
+  // Start timer
+  startTimer();
   
   // Start fetching music features
   startMusicFeaturesFetching();
@@ -95,30 +114,72 @@ function stopSession() {
   }
   
   console.log('🛑 Stopping session...');
+  
+  // Calculate final duration
+  const duration = Date.now() - sessionStartTime;
+  const minutes = Math.floor(duration / 60000);
+  const totalSeconds = Math.floor(duration / 1000);
+  
   sessionActive = false;
   
-  chrome.storage.local.get(['session_start_time'], (result) => {
-    const duration = Date.now() - (result.session_start_time || Date.now());
-    const minutes = Math.floor(duration / 60000);
-    
-    chrome.storage.local.set({ 
-      session_active: false,
-      last_session_duration: minutes
-    });
-    
-    // Stop fetching music features
-    stopMusicFeaturesFetching();
-    
-    // Show notification with duration
-    if (chrome.notifications) {
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/icon48.png',
-        title: 'Session Ended',
-        message: `Great work! Session lasted ${minutes} minutes. 🎉`
-      });
-    }
+  // Stop timer
+  stopTimer();
+  
+  // Stop music features
+  stopMusicFeaturesFetching();
+  
+  // Save to storage
+  chrome.storage.local.set({ 
+    session_active: false,
+    session_start_time: null,
+    elapsed_seconds: totalSeconds,
+    last_session_duration: minutes
   });
+  
+  // Show notification with duration
+  if (chrome.notifications) {
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon48.png',
+      title: 'Session Ended',
+      message: `Great work! Session lasted ${minutes} minutes. 🎉`
+    });
+  }
+}
+
+// ============================================
+// TIMER LOGIC (Runs in Background)
+// ============================================
+
+function startTimer() {
+  console.log('⏱️ Starting background timer...');
+  
+  // Update every second
+  timerInterval = setInterval(() => {
+    if (sessionActive && sessionStartTime) {
+      const now = Date.now();
+      const elapsedSeconds = Math.floor((now - sessionStartTime) / 1000);
+      
+      // Save to storage so popup can read it
+      chrome.storage.local.set({ 
+        elapsed_seconds: elapsedSeconds 
+      });
+      
+      // Log every minute
+      if (elapsedSeconds % 60 === 0) {
+        const minutes = Math.floor(elapsedSeconds / 60);
+        console.log(`⏱️ Session running: ${minutes} minutes`);
+      }
+    }
+  }, 1000);
+}
+
+function stopTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+    console.log('⏸️ Timer stopped');
+  }
 }
 
 // ============================================
@@ -134,7 +195,7 @@ function startMusicFeaturesFetching() {
   // Then fetch every 60 seconds
   musicFeaturesInterval = setInterval(() => {
     fetchMusicFeatures();
-  }, 60000); // 1 minute
+  }, 60000);
 }
 
 function stopMusicFeaturesFetching() {
@@ -167,14 +228,12 @@ async function fetchMusicFeatures() {
         chrome.storage.local.get(['music_history'], (result) => {
           const history = result.music_history || [];
           
-          // Add current features to history
           history.push({
             ...data,
             timestamp: Date.now(),
             time_string: timestamp
           });
           
-          // Keep only last 100 entries
           if (history.length > 100) {
             history.shift();
           }
@@ -186,13 +245,11 @@ async function fetchMusicFeatures() {
           });
         });
         
-        // Log full JSON (can be collapsed in console)
         console.log('📄 Full JSON:', data);
         
       } else {
         console.log('⚠️ No music playing or error:', data.error);
         
-        // Save null to indicate no music
         chrome.storage.local.set({ 
           latest_music_features: null,
           music_features_timestamp: Date.now()
@@ -210,12 +267,11 @@ async function fetchMusicFeatures() {
 // WEB NAVIGATION MONITORING
 // ============================================
 
-// Optional: detect navigation to login/auth pages
 if (chrome.webNavigation) {
   chrome.webNavigation.onBeforeNavigate.addListener((details) => {
     if (details.url.includes("login") || details.url.includes("auth")) {
       console.log("User navigated to login/auth page:", details.url);
-      // Save navigation event
+      
       chrome.storage.local.get(['auth_navigation_history'], (result) => {
         const history = result.auth_navigation_history || [];
         history.push({
@@ -223,7 +279,6 @@ if (chrome.webNavigation) {
           timestamp: Date.now()
         });
         
-        // Keep only last 20
         if (history.length > 20) {
           history.shift();
         }
@@ -241,11 +296,14 @@ if (chrome.webNavigation) {
 chrome.runtime.onInstalled.addListener(() => {
   console.log('🚀 Procrastination Police extension installed/updated');
   
-  // Check if there was an active session before update
-  chrome.storage.local.get(['session_active'], (result) => {
-    if (result.session_active) {
+  // Check if there was an active session
+  chrome.storage.local.get(['session_active', 'session_start_time'], (result) => {
+    if (result.session_active && result.session_start_time) {
       console.log('📌 Resuming previous session...');
-      startSession();
+      sessionActive = true;
+      sessionStartTime = result.session_start_time;
+      startTimer();
+      startMusicFeaturesFetching();
     }
   });
 });
@@ -254,23 +312,28 @@ chrome.runtime.onStartup.addListener(() => {
   console.log('🔄 Browser started, extension loaded');
   
   // Resume session if it was active
-  chrome.storage.local.get(['session_active'], (result) => {
-    if (result.session_active) {
+  chrome.storage.local.get(['session_active', 'session_start_time'], (result) => {
+    if (result.session_active && result.session_start_time) {
       console.log('📌 Resuming session from previous browser session...');
-      startSession();
+      sessionActive = true;
+      sessionStartTime = result.session_start_time;
+      startTimer();
+      startMusicFeaturesFetching();
     }
   });
 });
 
-// Keep service worker alive (Chrome can sometimes suspend it)
+// Keep service worker alive
 setInterval(() => {
-  chrome.storage.local.get(['session_active'], (result) => {
-    // Just a keepalive check
+  chrome.storage.local.get(['session_active', 'session_start_time'], (result) => {
     if (result.session_active && !sessionActive) {
       console.log('⚠️ Service worker was suspended. Restarting session...');
-      startSession();
+      sessionActive = true;
+      sessionStartTime = result.session_start_time;
+      startTimer();
+      startMusicFeaturesFetching();
     }
   });
-}, 30000); // Check every 30 seconds
+}, 30000);
 
 console.log('✅ Background service worker fully initialized and ready!');
