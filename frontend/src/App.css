@@ -89,7 +89,7 @@
 }
 
 .factor.fade-out {
-  animation: blurOutDisappear 2s forwards;
+  animation: blurOutDisappear 0s forwards;
   pointer-events: none;
 }
 
