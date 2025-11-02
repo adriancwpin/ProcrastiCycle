@@ -213,14 +213,37 @@ async function fetchActiveTabs() {
   try {
     // Get all tabs
     const tabs = await chrome.tabs.query({});
-    const urls = tabs.map(tab => tab.url).filter(url => url && !url.startsWith('chrome://'));
+    
+    // Extract domains and remove duplicates
+    const urlSet = new Set();
+    
+    tabs.forEach(tab => {
+      if (tab.url && !tab.url.startsWith('chrome://')) {
+        try {
+          const urlObj = new URL(tab.url);
+          
+          // Get domain + first path segment
+          const pathParts = urlObj.pathname.split('/').filter(p => p);
+          const firstPath = pathParts.length > 0 ? '/' + pathParts[0] : '';
+          
+          const shortUrl = urlObj.hostname + firstPath;
+          urlSet.add(shortUrl);
+          
+        } catch (e) {
+          // Invalid URL, skip
+        }
+      }
+    });
+    
+    const urls = Array.from(urlSet);
     
     if (urls.length === 0) {
       console.log('⚠️ No valid URLs to analyze');
       return;
     }
     
-    console.log(`   📑 Found ${urls.length} tabs to analyze`);
+    console.log(`   📑 ${tabs.length} tabs → ${urls.length} unique domains`);
+    console.log(`   📋 Domains:`, urls.slice(0, 10).join(', '));
     
     // Send to Flask backend
     const response = await fetch('http://127.0.0.1:8888/get_active_tabs', {
@@ -247,6 +270,8 @@ async function fetchActiveTabs() {
           history.push({
             average_score: data.average_score,
             urls_count: data.urls_count,
+            unique_domains: urls.length,
+            total_tabs: tabs.length,
             timestamp: Date.now(),
             time_string: timestamp
           });
