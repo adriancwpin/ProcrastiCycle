@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSpotify } from "@fortawesome/free-brands-svg-icons";
 import { faCalendarDays } from "@fortawesome/free-solid-svg-icons";
@@ -22,14 +22,11 @@ function App() {
   const [calendarPending, setCalendarPending] = useState(false);
 
   const [spotifyVisible, setSpotifyVisible] = useState(true);
-  const [fadeSpotify] = useState(false);
-
   const [calendarVisible, setCalendarVisible] = useState(true);
-  const [fadeCalendar] = useState(false);
 
   const [startVisible, setStartVisible] = useState(false);
 
-  // Stopwatch states
+  // Session & Timer states (read from background)
   const [isRunning, setIsRunning] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<number | null>(null);
@@ -43,7 +40,7 @@ function App() {
   // 🆕 Activity tracking interval
   const activityLoggerRef = useRef<number | null>(null);
 
-  // Load visibility & stopwatch states on mount, calculate elapsedSeconds if running
+  // Load states on mount
   useEffect(() => {
     chrome.storage.local.get(
       [
@@ -53,12 +50,11 @@ function App() {
         "calendarPending",
         "spotifyVisible",
         "calendarVisible",
-        "stopwatchRunning",
-        "elapsedSeconds",
-        "stopwatchLastTimestamp",
+        "session_active",
+        "elapsed_seconds"
       ],
       (result: any) => {
-        // Load authorization states
+        // Authorization states
         const spotifyAuth = result.spotifyAuthorized || false;
         const calendarAuth = result.calendarAuthorized || false;
         const spotifyPend = result.spotifyPending || false;
@@ -69,35 +65,41 @@ function App() {
         setSpotifyPending(spotifyPend);
         setCalendarPending(calendarPend);
         
-        // If authorized or pending, hide the box
+        // Visibility
         setSpotifyVisible(!spotifyAuth && !spotifyPend);
         setCalendarVisible(!calendarAuth && !calendarPend);
 
-        if (result.isRunning && result.startTimestamp) {
-          setIsRunning(true);
-
-          // Calculate elapsed seconds from stored startTimestamp
-          const now = Date.now();
-          const elapsed = Math.floor((now - result.startTimestamp) / 1000);
-          setElapsedSeconds(elapsed);
-        } else {
-          // Not running, use stored elapsedSeconds or 0
-          setIsRunning(false);
-          setElapsedSeconds(result.elapsedSeconds || 0);
+        // Session status
+        const sessionActive = result.session_active || false;
+        setIsRunning(sessionActive);
+        
+        if (sessionActive) {
+          setElapsedSeconds(result.elapsed_seconds || 0);
         }
       }
     );
   }, []);
 
+  // Update timer every second by reading from storage
+  useEffect(() => {
+    if (isRunning) {
+      const timerUpdate = setInterval(() => {
+        chrome.storage.local.get(['elapsed_seconds'], (result: any) => {
+          setElapsedSeconds(result.elapsed_seconds || 0);
+        });
+      }, 1000);
 
-  // Poll for authorization completion if pending
+      return () => clearInterval(timerUpdate);
+    }
+  }, [isRunning]);
+
+  // Poll for Spotify authorization
   useEffect(() => {
     if (spotifyPending && !spotifyAuthorized) {
       const checkAuth = setInterval(async () => {
         try {
           const res = await fetch("http://127.0.0.1:8888/get_track_info");
           if (res.ok) {
-            // Authorization complete!
             clearInterval(checkAuth);
             setSpotifyAuthorized(true);
             setSpotifyPending(false);
@@ -112,7 +114,6 @@ function App() {
         }
       }, 2000);
 
-      // Stop checking after 2 minutes
       setTimeout(() => {
         clearInterval(checkAuth);
         if (!spotifyAuthorized) {
@@ -125,12 +126,11 @@ function App() {
     }
   }, [spotifyPending, spotifyAuthorized]);
 
-  // Similar polling for calendar (if you implement it)
+  // Poll for Calendar authorization
   useEffect(() => {
     if (calendarPending && !calendarAuthorized) {
       const checkAuth = setInterval(async () => {
         try {
-          // Replace with your calendar check endpoint
           const res = await fetch("http://127.0.0.1:8888/check_calendar_auth");
           if (res.ok) {
             clearInterval(checkAuth);
@@ -159,12 +159,13 @@ function App() {
     }
   }, [calendarPending, calendarAuthorized]);
 
-  // Show Start button only if both services are authorized AND both boxes are hidden
+  // Show Start button logic
   useEffect(() => {
     const bothAuthorized = spotifyAuthorized && calendarAuthorized;
     const bothHidden = !spotifyVisible && !calendarVisible;
     
-    if (bothAuthorized && bothHidden) {
+    // IMPORTANT: Don't show start button if session is already running
+    if (bothAuthorized && bothHidden && !isRunning) {
       setStartVisible(true);
       setStatus("");
     } else {
@@ -338,7 +339,7 @@ function App() {
     setIsRunning(true);
     setStatus("Session started! 🚀");
     
-    // Send message to background to start monitoring
+    // Tell background to start session
     chrome.runtime.sendMessage({ action: "startSession" }, (response: any) => {
       console.log("Session started:", response);
     });
@@ -348,7 +349,7 @@ function App() {
     setIsRunning(false);
     setStatus("Session stopped");
     
-    // Send message to background to stop monitoring
+    // Tell background to stop session
     chrome.runtime.sendMessage({ action: "stopSession" }, (response: any) => {
       console.log("Session stopped:", response);
     });
@@ -356,12 +357,9 @@ function App() {
 
   const spotify_click = async () => {
     setStatus("Opening Spotify authorization...");
-    
-    // Mark as pending immediately
     setSpotifyPending(true);
     setSpotifyVisible(false);
     
-    // Save pending state
     chrome.storage.local.set({ 
       spotifyPending: true,
       spotifyVisible: false
@@ -373,7 +371,6 @@ function App() {
         setStatus("Waiting for Spotify authorization...");
       } else {
         setStatus("Error: Backend not responding");
-        // Reset on error
         setSpotifyPending(false);
         setSpotifyVisible(true);
         chrome.storage.local.set({ 
@@ -384,7 +381,6 @@ function App() {
     } catch (err) {
       console.error(err);
       setStatus("Error: Could not reach backend");
-      // Reset on error
       setSpotifyPending(false);
       setSpotifyVisible(true);
       chrome.storage.local.set({ 
@@ -396,12 +392,9 @@ function App() {
 
   const calendar_click = async () => {
     setStatus("Opening Google Calendar authorization...");
-    
-    // Mark as pending immediately
     setCalendarPending(true);
     setCalendarVisible(false);
     
-    // Save pending state
     chrome.storage.local.set({ 
       calendarPending: true,
       calendarVisible: false
@@ -413,7 +406,6 @@ function App() {
         setStatus("Waiting for Google Calendar authorization...");
       } else {
         setStatus("Error: Backend not responding");
-        // Reset on error
         setCalendarPending(false);
         setCalendarVisible(true);
         chrome.storage.local.set({ 
@@ -424,7 +416,6 @@ function App() {
     } catch (err) {
       console.error(err);
       setStatus("Error: Could not reach backend");
-      // Reset on error
       setCalendarPending(false);
       setCalendarVisible(true);
       chrome.storage.local.set({ 
@@ -439,10 +430,7 @@ function App() {
       <h1>Procrastination Police 👮‍♀️</h1>
 
       {spotifyVisible && (
-        <div
-          className={`factor ${fadeSpotify ? "fade-out" : ""}`}
-          onClick={spotify_click}
-        >
+        <div className="factor" onClick={spotify_click}>
           <FontAwesomeIcon icon={faSpotify} size="3x" color="#1DB954" />
           <h2>Spotify</h2>
         </div>
@@ -457,10 +445,7 @@ function App() {
       )}
 
       {calendarVisible && (
-        <div
-          className={`factor ${fadeCalendar ? "fade-out" : ""}`}
-          onClick={calendar_click}
-        >
+        <div className="factor" onClick={calendar_click}>
           <FontAwesomeIcon icon={faCalendarDays} size="3x" color="#4285F4" />
           <h2>Google Calendar</h2>
         </div>
@@ -474,7 +459,8 @@ function App() {
         </div>
       )}
 
-      {startVisible && (
+      {/* Show Start button OR Running session */}
+      {(startVisible || isRunning) && (
         <div className="factor start-button">
           {!isRunning ? (
             <button onClick={handleStartClick}>▶️ Start Session</button>

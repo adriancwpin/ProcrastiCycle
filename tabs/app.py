@@ -7,7 +7,7 @@ import re
 app = Flask(__name__)
 
 # Configure Gemini API
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
@@ -17,7 +17,7 @@ def get_average_score(urls: list) -> float:
     Returns a float between 0 and 1.
     """
     try:
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
         # Format URLs as a numbered list
         urls_text = "\n".join([f"{i+1}. {url}" for i, url in enumerate(urls)])
@@ -90,4 +90,4 @@ def analyze_tabs():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5001)
