@@ -100,21 +100,20 @@ def callback():
         """
     else:
         return "<h1>Failed to get token</h1>", 400
-    
+
+
 @app.route('/get_track_info', methods=['GET'])
 def get_track_info():
     """
     API endpoint to check if Spotify is authorized and get current track info.
-    Frontend uses this to check if authorization is complete.
+    Also checks if Google Calendar is authorized (token present).
     """
-    # Check if we have a token
     if 'token' not in auth_storage:
-        return jsonify({"error": "Not authenticated"}), 401
+        return jsonify({"error": "Spotify not authenticated"}), 401
     
     token = auth_storage['token']
     
     try:
-        # Get currently playing track
         currently_playing = auth.get_currently_playing(token)
         
         if currently_playing and "item" in currently_playing:
@@ -126,9 +125,8 @@ def get_track_info():
                 track['artists'][0]['name']
             )
             
-            # Return track info and features
-            return jsonify({
-                "authenticated": True,
+            response = {
+                "spotify_authenticated": True,
                 "track": {
                     "name": track['name'],
                     "artist": track['artists'][0]['name'],
@@ -137,21 +135,57 @@ def get_track_info():
                     "image": track['album']['images'][0]['url'] if 'album' in track and track['album']['images'] else None
                 },
                 "features": music_features
-            }), 200
+            }
         else:
-            # No track playing, but still authenticated
-            return jsonify({
-                "authenticated": True,
+            response = {
+                "spotify_authenticated": True,
                 "track": None,
                 "message": "No track currently playing"
-            }), 200
-            
+            }
     except Exception as e:
         print(f"Error in get_track_info: {e}")
         return jsonify({
             "error": str(e),
-            "authenticated": False
+            "spotify_authenticated": False
         }), 500
+
+    # ============================================================
+    # 📅 2️⃣ GOOGLE CALENDAR TOKEN CHECK
+    # ============================================================
+    try:
+        token_path = getattr(calendar_auth, "token", None)
+        token_exists = os.path.exists(token_path) if token_path else False
+
+        if not token_exists:
+            # Token file missing → Not authenticated
+            return jsonify({
+                **response,
+                "calendar_authenticated": False,
+                "calendar_token": {
+                    "path": token_path,
+                    "exists": False
+                },
+                "message": "Google Calendar not authenticated"
+            }), 401
+
+        # Token exists → Authenticated
+        return jsonify({
+            **response,
+            "calendar_authenticated": True,
+            "calendar_token": {
+                "path": token_path,
+                "exists": True
+            }
+        }), 200
+
+    except Exception as e:
+        print(f"❌ Error checking calendar token: {e}")
+        return jsonify({
+            **response,
+            "calendar_authenticated": False,
+            "error": str(e)
+        }), 500
+
 
 
 #=======================================================================================================================================
