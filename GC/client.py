@@ -156,3 +156,115 @@ class calendarClient:
             "location": event.get('location', ''),
             "is_all_day": 'date' in event['start']
         }
+    
+    def get_day_schedule_analysis(self, date=None):  # ✅ Fixed: Use : not {
+        """
+        Get all events for a specific day and calculate total event time
+    
+        Args:
+        date: datetime object (defaults to today if None)
+    
+        Returns:
+        {
+            "date": "2025-11-01",
+            "events": [...],
+            "total_events": 5,
+            "total_minutes": 240,
+            "total_hours": 4.0,
+            "busy_percentage": 16.67,
+            "free_time_minutes": 1200,
+            "breakdown": {
+                "meetings": 3,
+                "deadlines": 1,
+                "other": 1
+            }
+        }
+    """
+        try:
+            service = self.get_service()
+            if not service:
+                return {"error": "Not Authenticated"}
+            
+            # If no date then use today
+            if date is None:
+                target_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)  # ✅ Fixed typo: target_data
+            else:
+                target_date = date.replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            # Get start and end of the day
+            day_start = target_date  # ✅ Fixed indentation
+            day_end = target_date + timedelta(days=1)
+            
+            # Fetch all events for this day
+            events_result = service.events().list(
+                calendarId='primary',
+                timeMin=day_start.isoformat().replace('+00:00', 'Z'),
+                timeMax=day_end.isoformat().replace('+00:00', 'Z'),
+                singleEvents=True,
+                orderBy='startTime'
+            ).execute()
+            
+            events = events_result.get('items', [])
+            formatted_events = self.format_events(events)
+            
+            # Calculate total time
+            total_minutes = 0
+            breakdown = {  # ✅ Added: You removed this variable!
+                "meetings": 0,
+                "deadlines": 0,
+                "other": 0
+            }
+            
+            for event in events:
+                # Calculate duration for each event
+                start_str = event['start'].get('dateTime', event['start'].get('date'))
+                end_str = event['end'].get('dateTime', event['end'].get('date'))
+                
+                # Skip all-day events for time calculation
+                if 'T' not in start_str or 'T' not in end_str:
+                    continue
+                
+                # Parse times
+                try:
+                    start_time = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+                    end_time = datetime.fromisoformat(end_str.replace('Z', '+00:00'))
+                    
+                    # Calculate duration in minutes
+                    duration = (end_time - start_time).total_seconds() / 60
+                    total_minutes += duration
+                    
+                    # ✅ Added: Categorize event
+                    summary = event.get('summary', '').lower()
+                    if any(word in summary for word in ['meeting', 'call', 'standup', 'sync']):
+                        breakdown['meetings'] += 1
+                    elif any(word in summary for word in ['deadline', 'due', 'submit']):
+                        breakdown['deadlines'] += 1
+                    else:
+                        breakdown['other'] += 1
+                        
+                except Exception as e:
+                    print(f"Error calculating duration for event: {e}")
+                    continue
+            
+            # Calculate statistics
+            total_hours = total_minutes / 60
+            minutes_in_day = 24 * 60
+            busy_percentage = (total_minutes / minutes_in_day) * 100 if minutes_in_day > 0 else 0
+            free_time_minutes = minutes_in_day - total_minutes
+            
+            return {
+                "status": "success",
+                "date": target_date.date().isoformat(),
+                "events": formatted_events,
+                "total_events": len(events),
+                "total_minutes": round(total_minutes, 2),
+                "total_hours": round(total_hours, 2),
+                "busy_percentage": round(busy_percentage, 2),
+                "free_time_minutes": round(free_time_minutes, 2),
+                "free_time_hours": round(free_time_minutes / 60, 2),
+                "breakdown": breakdown
+            }
+            
+        except Exception as e:
+            return {"error": f"Failed to analyze day schedule: {str(e)}"}
+        # ✅ Removed: Extra } at the end
