@@ -691,6 +691,7 @@ function startMusicFeaturesFetching() {
   fetchMusicFeatures();
   fetchActiveTabs();
   fetchCalendarEvents();
+  fetchActivityStats();
   
   // Wait a bit for data to be collected, then make first prediction
   setTimeout(() => {
@@ -702,6 +703,7 @@ function startMusicFeaturesFetching() {
     fetchMusicFeatures();
     fetchActiveTabs();
     fetchCalendarEvents();
+    fetchActivityStats();
     
     // Make prediction after data is collected
     setTimeout(() => {

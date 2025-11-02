@@ -11,7 +11,7 @@ from GC.auth import calendarAuth
 from GC.client import calendarClient
 import requests
 import google.generativeai as genai
-from trackers import keyboard_mouse
+from trackers.keyboard_mouse import tracker
 
 FEATURE_COLUMNS = [
     'Hour',
@@ -677,9 +677,9 @@ def get_procrastination_prediction():
 @app.route('/api/activity', methods=['GET'])
 def get_activity():
     """API endpoint to get current activity stats"""
-    stats = keyboard_mouse.get_stats()
+    stats = tracker.get_stats()
     stats['timestamp'] = datetime.datetime.now().isoformat()
-    stats['is_running'] = keyboard_mouse.running
+    stats['is_running'] = tracker.running
     return jsonify(stats)
 
 
@@ -687,13 +687,13 @@ def get_activity():
 def start_activity_tracking():
     """Start activity tracking when session starts"""
     try:
-        if keyboard_mouse.running:
+        if tracker.running:
             return jsonify({
                 "success": True,
-                "message": "keyboard_mouse already running"
+                "message": "tracker already running"
             }), 200
         
-        keyboard_mouse.start()
+        tracker.start()
         
         return jsonify({
             "success": True,
@@ -710,13 +710,13 @@ def start_activity_tracking():
 def stop_activity_tracking():
     """Stop activity tracking when session ends"""
     try:
-        if not keyboard_mouse.running:
+        if not tracker.running:
             return jsonify({
                 "success": True,
                 "message": "Tracker not running"
             }), 200
         
-        keyboard_mouse.stop()
+        tracker.stop()
         
         return jsonify({
             "success": True,

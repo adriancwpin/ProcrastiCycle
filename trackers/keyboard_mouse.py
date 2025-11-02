@@ -22,6 +22,7 @@ class ActivityTracker:
     def _on_key_press(self, key):
         with self.lock:
             self.keystroke_times.append(time.time())
+            print(f"🔑 Key pressed! Total: {len(self.keystroke_times)}")
 
     def _on_mouse_move(self,x , y):
         with self.lock:
