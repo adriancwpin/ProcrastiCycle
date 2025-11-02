@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSpotify } from "@fortawesome/free-brands-svg-icons";
 import { faCalendarDays } from "@fortawesome/free-solid-svg-icons";
@@ -107,7 +107,7 @@ function App() {
               spotifyAuthorized: true, 
               spotifyPending: false 
             });
-            setStatus("Spotify Authorized!");
+            setStatus("Spotify Authorised!");
           }
         } catch (err) {
           // Still waiting
@@ -140,7 +140,7 @@ function App() {
               calendarAuthorized: true, 
               calendarPending: false 
             });
-            setStatus("Google Calendar Authorized!");
+            setStatus("Google Calendar Authorised!");
           }
         } catch (err) {
           // Still waiting
@@ -337,7 +337,7 @@ function App() {
 
   const handleStartClick = () => {
     setIsRunning(true);
-    setStatus("Session started! 🚀");
+    setStatus("locking in");
     
     // Tell background to start session
     chrome.runtime.sendMessage({ action: "startSession" }, (response: any) => {
@@ -356,7 +356,7 @@ function App() {
   };
 
   const spotify_click = async () => {
-    setStatus("Opening Spotify authorization...");
+    setStatus("Opening Spotify authorisation...");
     setSpotifyPending(true);
     setSpotifyVisible(false);
     
@@ -368,7 +368,7 @@ function App() {
     try {
       const res = await fetch("http://127.0.0.1:8888/open_spotify");
       if (res.ok) {
-        setStatus("Waiting for Spotify authorization...");
+        setStatus("Waiting for Spotify authorisation...");
       } else {
         setStatus("Error: Backend not responding");
         setSpotifyPending(false);
@@ -391,7 +391,7 @@ function App() {
   };
 
   const calendar_click = async () => {
-    setStatus("Opening Google Calendar authorization...");
+    setStatus("Opening Google Calendar authorisation...");
     setCalendarPending(true);
     setCalendarVisible(false);
     
@@ -403,7 +403,7 @@ function App() {
     try {
       const res = await fetch("http://127.0.0.1:8888/open_calendar");
       if (res.ok) {
-        setStatus("Waiting for Google Calendar authorization...");
+        setStatus("Waiting for Google Calendar authorisation...");
       } else {
         setStatus("Error: Backend not responding");
         setCalendarPending(false);
@@ -439,8 +439,8 @@ function App() {
       {spotifyPending && !spotifyAuthorized && (
         <div className="factor pending">
           <FontAwesomeIcon icon={faSpotify} size="3x" color="#1DB954" />
-          <h2>Spotify - Authorizing...</h2>
-          <p className="pending-text">Complete authorization in the browser tab</p>
+          <h2>Spotify - Authorising...</h2>
+          <p className="pending-text">Complete authorisation</p>
         </div>
       )}
 
@@ -454,26 +454,33 @@ function App() {
       {calendarPending && !calendarAuthorized && (
         <div className="factor pending">
           <FontAwesomeIcon icon={faCalendarDays} size="3x" color="#4285F4" />
-          <h2>Calendar - Authorizing...</h2>
-          <p className="pending-text">Complete authorization in the browser tab</p>
+          <h2>Calendar - Authorising...</h2>
+          <p className="pending-text">Complete authorisation </p>
         </div>
       )}
 
       {/* Show Start button OR Running session */}
       {(startVisible || isRunning) && (
-        <div className="factor start-button">
+        <div className="start-controls">
           {!isRunning ? (
-            <button onClick={handleStartClick}>▶️ Start Session</button>
+            <button onClick={handleStartClick} className="session-btn">START </button>
           ) : (
-            <>
-              <p className="timer">⏱️ {formatTime(elapsedSeconds)}</p>
-              <button onClick={handleStopClick}>⏹️ Stop Session</button>
-            </>
+            <div className="running-session">
+              <p className="timer"> {formatTime(elapsedSeconds)}</p>
+              <button onClick={handleStopClick} className="session-btn stop-btn">STOP</button>
+            </div>
           )}
         </div>
       )}
+  {status && (
+    <p
+      id={status === "locking in" ? "locking-in" : undefined}
+      className="status-message"
+    >
+      {status}
+    </p>
+  )}
 
-      {status && <p className="status-message">{status}</p>}
     </div>
   );
 }

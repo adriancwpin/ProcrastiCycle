@@ -73,7 +73,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // SESSION MANAGEMENT WITH TIMER
 // ============================================
 
-function startSession() {
+async function startSession() {
   if (sessionActive) {
     console.log('⚠️ Session already active');
     return;
@@ -93,6 +93,25 @@ function startSession() {
   // Start timer
   startTimer();
   
+// Start activity tracker via main server (same server!)
+  try {
+    const response = await fetch('http://127.0.0.1:8888/api/start_activity', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log('✅ Activity tracker started:', data.message);
+    } else {
+      console.log('⚠️ Could not start activity tracker');
+    }
+  } catch (error) {
+    console.warn('⚠️ Activity tracker error:', error.message);
+  }
+
   // Start fetching music features
   startMusicFeaturesFetching();
   startCalendarFetching();
@@ -108,7 +127,7 @@ function startSession() {
   }
 }
 
-function stopSession() {
+async function stopSession() {
   if (!sessionActive) {
     console.log('⚠️ No active session');
     return;
@@ -130,6 +149,20 @@ function stopSession() {
   stopMusicFeaturesFetching();
   stopCalendarFetching();
   
+  // Stop activity tracker via main server
+  try {
+    const response = await fetch('http://127.0.0.1:8888/api/stop_activity', {
+      method: 'POST'
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log('✅ Activity tracker stopped:', data.message);
+    }
+  } catch (error) {
+    console.error('❌ Error stopping activity tracker:', error);
+  }
+
   // Save to storage
   chrome.storage.local.set({ 
     session_active: false,
@@ -187,18 +220,6 @@ function stopTimer() {
 // ============================================
 // MUSIC FEATURES FETCHING
 // ============================================
-
-function startMusicFeaturesFetching() {
-  console.log('🎵 Starting music features monitoring...');
-  
-  // Fetch immediately
-  fetchMusicFeatures();
-  
-  // Then fetch every 60 seconds
-  musicFeaturesInterval = setInterval(() => {
-    fetchMusicFeatures();
-  }, 60000);
-}
 
 function stopMusicFeaturesFetching() {
   if (musicFeaturesInterval) {
@@ -302,19 +323,32 @@ async function fetchActiveTabs() {
   }
 }
 
-// Update startMusicFeaturesFetching to also fetch tabs
+
 function startMusicFeaturesFetching() {
   console.log('🎵 Starting music features monitoring...');
   console.log('🌐 Starting tab analysis monitoring...');
+  console.log('⌨️  Starting activity monitoring...');
+  console.log('🤖 Starting procrastination prediction...');
   
   // Fetch immediately
   fetchMusicFeatures();
   fetchActiveTabs();
+  fetchCalendarEvents();
+  fetchActivityStats();
+
+  setTimeout(() => {
+    makeProcrastinationPrediction();
+  }, 5000); // Wait 5 seconds for data to populate
   
   // Then fetch every 60 seconds
   musicFeaturesInterval = setInterval(() => {
     fetchMusicFeatures();
     fetchActiveTabs();
+    fetchCalendarEvents();
+
+    setTimeout(() => {
+      makeProcrastinationPrediction();
+    }, 3000); // Wait 3 seconds for all data to arrive
   }, 60000);
 }
 
@@ -458,6 +492,281 @@ async function fetchCalendarEvents() {
     }
   } catch (error) {
     console.error('❌ Error fetching calendar events:', error);
+  }
+}
+
+async function makeProcrastinationPrediction() {
+  const timestamp = new Date().toLocaleTimeString();
+  console.log(`\n🤖 [${timestamp}] Making procrastination prediction...`);
+  
+  try {
+    // Gather all data from Chrome storage
+    const data = await new Promise((resolve) => {
+      chrome.storage.local.get([
+        'latest_music_features',
+        'latest_tab_analysis',
+        'latest_calendar_events',
+        'activity_stats'  // You'll need to store this from your activity tracker
+      ], (result) => {
+        resolve(result);
+      });
+    });
+    
+    // Get current time info
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    const dayOfWeek = now.getDay(); // 0 = Sunday, 6 = Saturday
+    const minutesIntoDay = hour * 60 + minute;
+    
+    // Extract music features
+    const musicData = data.latest_music_features;
+    const hasSpotify = musicData && musicData.success ? 1 : 0;
+    const danceability = musicData?.features?.danceability || 0;
+    const tempo = musicData?.features?.tempo || 0;
+    const energy = musicData?.features?.energy || 0;
+    
+    // Extract tab productivity
+    const tabData = data.latest_tab_analysis;
+    const tabProductivity = tabData?.average_score || 0.5;
+    
+    // Extract calendar data
+    const calendarData = data.latest_calendar_events;
+    const minutesBefore = calculateMinutesBefore(calendarData);
+    const minutesAfter = calculateMinutesAfter(calendarData);
+    const minutesToNext = calculateMinutesToNext(calendarData);
+    
+    // Extract activity data (keystrokes, mouse moves, clicks)
+    const activityData = data.activity_stats || {};
+    const keystrokes = activityData.keystrokes_per_minute || 0;
+    const mouseMoves = activityData.mouse_moves_per_minute || 0;
+    const mouseClicks = activityData.mouse_clicks_per_minute || 0;
+    
+    // Build feature object matching ML model's expected format
+    const features = {
+      'Hour': hour,
+      'Minute': minute,
+      'Day of week': dayOfWeek,
+      'Keystrokes per min': keystrokes,
+      'Mouse moves per min': mouseMoves,
+      'Mouse clicks per min': mouseClicks,
+      'Productivity of Active Chrome Tabs': tabProductivity,
+      'Total Minutes of Events Before': minutesBefore,
+      'Total Minutes of Events After': minutesAfter,
+      'Total Minutes to Next Event': minutesToNext,
+      'Spotify': hasSpotify,
+      'Danceability': danceability,
+      'Tempo': tempo,
+      'Energy': energy,
+      'Minutes_Into_Day': minutesIntoDay
+    };
+    
+    console.log('📊 Features collected:');
+    console.log(`   Time: ${hour}:${minute}, Day: ${dayOfWeek}`);
+    console.log(`   Activity: ${keystrokes} keys, ${mouseClicks} clicks`);
+    console.log(`   Tab productivity: ${(tabProductivity * 100).toFixed(0)}%`);
+    console.log(`   Music: ${hasSpotify ? 'Yes' : 'No'}`);
+    console.log(`   Calendar: ${minutesToNext}min to next event`);
+    
+    // Send to Flask backend for prediction
+    const response = await fetch('http://127.0.0.1:8888/get_procrastination_prediction', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(features)
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      
+      if (result.success) {
+        const prediction = result.prediction;
+        const isProcrastinating = result.procrastinating;
+        
+        console.log('✅ Prediction Retrieved:');
+        console.log(`   🎯 Score: ${prediction.toFixed(3)}`);
+        console.log(`   📊 Probability: ${(prediction * 100).toFixed(1)}%`);
+        console.log(`   🚨 Status: ${isProcrastinating ? 'PROCRASTINATING' : 'Productive'}`);
+        console.log('');
+        
+        // Save to storage
+        chrome.storage.local.get(['prediction_history'], (storageResult) => {
+          const history = storageResult.prediction_history || [];
+          
+          history.push({
+            prediction: prediction,
+            procrastinating: isProcrastinating,
+            features: features,
+            timestamp: Date.now(),
+            time_string: timestamp
+          });
+          
+          if (history.length > 100) {
+            history.shift();
+          }
+          
+          chrome.storage.local.set({ 
+            latest_prediction: result,
+            prediction_timestamp: Date.now(),
+            prediction_history: history
+          });
+        });
+        
+        // Show notification if procrastinating
+        if (isProcrastinating && chrome.notifications) {
+          chrome.notifications.create({
+            type: 'basic',
+            iconUrl: 'icons/icon48.png',
+            title: '🚨 Procrastination Alert!',
+            message: `${(prediction * 100).toFixed(0)}% chance you're procrastinating! Get back to work!`,
+            priority: 2
+          });
+        }
+        
+      } else {
+        console.log('⚠️ Prediction error:', result.error);
+      }
+    } else {
+      console.log(`❌ Failed to get prediction. Status: ${response.status}`);
+    }
+  } catch (error) {
+    console.error('❌ Error making prediction:', error);
+  }
+}
+
+function calculateMinutesBefore(calendarData) {
+  if (!calendarData || !calendarData.events) return 0;
+  
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  
+  let totalMinutes = 0;
+  
+  calendarData.events.forEach(event => {
+    const eventDate = event.start.split('T')[0];
+    if (eventDate === todayStr) {
+      const eventTime = new Date(event.start);
+      if (eventTime < now) {
+        // Event was earlier today
+        const duration = event.duration || 60; // Assume 60 min if not specified
+        totalMinutes += duration;
+      }
+    }
+  });
+  
+  return totalMinutes;
+}
+
+function calculateMinutesAfter(calendarData) {
+  if (!calendarData || !calendarData.events) return 0;
+  
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  
+  let totalMinutes = 0;
+  
+  calendarData.events.forEach(event => {
+    const eventDate = event.start.split('T')[0];
+    if (eventDate === todayStr) {
+      const eventTime = new Date(event.start);
+      if (eventTime > now) {
+        // Event is later today
+        const duration = event.duration || 60;
+        totalMinutes += duration;
+      }
+    }
+  });
+  
+  return totalMinutes;
+}
+
+function calculateMinutesToNext(calendarData) {
+  if (!calendarData || !calendarData.next_event) return 999; // Large number if no events
+  
+  if (calendarData.minutes_until !== undefined) {
+    return calendarData.minutes_until;
+  }
+  
+  const now = new Date();
+  const nextEventTime = new Date(calendarData.next_event.start);
+  const diffMs = nextEventTime - now;
+  const diffMinutes = Math.floor(diffMs / 60000);
+  
+  return Math.max(0, diffMinutes);
+}
+
+// Update startMusicFeaturesFetching to also call prediction
+function startMusicFeaturesFetching() {
+  console.log('🎵 Starting music features monitoring...');
+  console.log('🌐 Starting tab analysis monitoring...');
+  console.log('🤖 Starting procrastination prediction...');
+  
+  // Fetch immediately
+  fetchMusicFeatures();
+  fetchActiveTabs();
+  fetchCalendarEvents();
+  
+  // Wait a bit for data to be collected, then make first prediction
+  setTimeout(() => {
+    makeProcrastinationPrediction();
+  }, 10000); // Wait 5 seconds for data to populate
+  
+  // Then fetch every 60 seconds
+  musicFeaturesInterval = setInterval(() => {
+    fetchMusicFeatures();
+    fetchActiveTabs();
+    fetchCalendarEvents();
+    
+    // Make prediction after data is collected
+    setTimeout(() => {
+      makeProcrastinationPrediction();
+    }, 10000); // Wait 3 seconds for all data to arrive
+  }, 60000);
+}
+
+async function fetchActivityStats() {
+  const timestamp = new Date().toLocaleTimeString();
+  console.log(`\n⌨️ [${timestamp}] Fetching activity stats...`);
+  
+  try {
+    const response = await fetch('http://127.0.0.1:8888/api/activity');
+    
+    if (response.ok) {
+      const data = await response.json();
+      
+      console.log('✅ Activity Stats Retrieved:');
+      console.log(`   ⌨️  Keystrokes/min: ${data.keystrokes_per_minute}`);
+      console.log(`   🖱️  Mouse moves/min: ${data.mouse_moves_per_minute}`);
+      console.log(`   🖱️  Mouse clicks/min: ${data.mouse_clicks_per_minute}`);
+      console.log('');
+      
+      // Save to storage
+      chrome.storage.local.set({ 
+        activity_stats: {
+          keystrokes_per_minute: data.keystrokes_per_minute,
+          mouse_moves_per_minute: data.mouse_moves_per_minute,
+          mouse_clicks_per_minute: data.mouse_clicks_per_minute,
+          timestamp: Date.now(),
+          time_string: timestamp
+        }
+      });
+      
+    } else {
+      console.log(`⚠️ Activity API returned status: ${response.status}`);
+    }
+  } catch (error) {
+    console.warn('⚠️ Could not fetch activity stats:', error.message);
+    // Save default values
+    chrome.storage.local.set({ 
+      activity_stats: {
+        keystrokes_per_minute: 0,
+        mouse_moves_per_minute: 0,
+        mouse_clicks_per_minute: 0,
+        timestamp: Date.now(),
+        available: false
+      }
+    });
   }
 }
 

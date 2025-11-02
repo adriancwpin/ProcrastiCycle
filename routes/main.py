@@ -10,11 +10,87 @@ from spotify import auth
 from GC.auth import calendarAuth
 from GC.client import calendarClient
 import requests
+import google.generativeai as genai
+from trackers import keyboard_mouse
+
+FEATURE_COLUMNS = [
+    'Hour',
+    'Minute',
+    'Day of week',
+    'Keystrokes per min',
+    'Mouse moves per min',
+    'Mouse clicks per min',
+    'Productivity of Active Chrome Tabs',
+    'Total Minutes of Events Before',
+    'Total Minutes of Events After',
+    'Total Minutes to Next Event',
+    'Spotify',
+    'Danceability',
+    'Tempo',
+    'Energy',
+    'Minutes_Into_Day'
+]
 
 app = Flask(__name__)
 CORS(app)
 
 auth_storage = {}
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+
+def analyze_tabs_with_gemini(urls: list) -> float:
+    """
+    Analyze productivity of tab URLs using Gemini.
+    Returns average score between 0 and 1.
+    """
+    if not os.getenv("GOOGLE_API_KEY"):
+        print("⚠️ No Gemini API key, returning default score")
+        return 0.5
+    
+    try:
+        # Format URLs as a list
+        urls_text = "\n".join([f"- {url}" for url in urls])
+        
+        prompt = f"""Analyze these browser tabs and rate overall productivity from 0.0 to 1.0.
+
+Tabs:
+{urls_text}
+
+Scoring:
+- 0.0 = Completely unproductive (games, entertainment, social media)
+- 0.5 = Neutral (news, email, general browsing)
+- 1.0 = Highly productive (work tools, documentation, coding, learning)
+
+Return ONLY a single number between 0.0 and 1.0, nothing else.
+Example: 0.73"""
+
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        response = model.generate_content(prompt)
+        
+        # Extract the number
+        response_text = response.text.strip()
+        
+        # Try to parse as float
+        try:
+            score = float(response_text)
+        except ValueError:
+            # Find first number in response
+            numbers = re.findall(r'0?\.\d+|1\.0|0|1', response_text)
+            if numbers:
+                score = float(numbers[0])
+            else:
+                print(f"⚠️ Could not parse score from: {response_text}")
+                return 0.5
+        
+        # Ensure it's within bounds
+        score = max(0.0, min(1.0, score))
+        
+        print(f"✅ Productivity score: {score}")
+        return score
+        
+    except Exception as e:
+        print(f"❌ Gemini error: {e}")
+        return 0.5
+
 
 @app.route('/open_spotify', methods=['GET'])
 def start_auth():
@@ -193,82 +269,36 @@ def get_music_features():
     
 @app.route('/get_active_tabs', methods=['POST'])
 def get_active_tabs():
-    """
-    Receives active tab URLs from Chrome extension,
-    forwards them to app.py for Gemini analysis,
-    and returns the productivity score.
-    """
+    """Analyze tab productivity"""
     try:
         data = request.get_json()
         
         if not data or 'urls' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'Expected JSON with "urls" array'
-            }), 400
+            return jsonify({'success': False, 'error': 'No URLs provided'}), 400
         
-        urls = data['urls']
+        urls = [url for url in data['urls'] if url and isinstance(url, str)]
         
-        # Validate URLs
-        if not isinstance(urls, list) or len(urls) == 0:
-            return jsonify({
-                'success': False,
-                'error': 'Invalid or empty URLs array'
-            }), 400
+        if not urls:
+            return jsonify({'success': False, 'error': 'No valid URLs'}), 400
         
-        # Forward to app.py for Gemini analysis
-        try:
-            gemini_response = requests.post(
-                'http://127.0.0.1:5001/analyze-tabs',  # app.py endpoint
-                json={'urls': urls},
-                timeout=10
-            )
-            
-            if gemini_response.status_code == 200:
-                gemini_data = gemini_response.json()
-                average_score = gemini_data.get('average_score', 0.5)
-                
-                # Log the result
-                print(f"\n📊 Tab Analysis:")
-                print(f"   URLs analyzed: {len(urls)}")
-                print(f"   Average score: {average_score}")
-                print(f"   Timestamp: {datetime.datetime.now()}")
-                
-                # Return the score
-                return jsonify({
-                    'success': True,
-                    'average_score': average_score,
-                    'urls_count': len(urls),
-                    'timestamp': datetime.datetime.now().isoformat()
-                }), 200
-            else:
-                print(f"❌ Gemini service error: {gemini_response.status_code}")
-                return jsonify({
-                    'success': False,
-                    'error': 'Gemini analysis service error'
-                }), 500
-                
-        except requests.exceptions.Timeout:
-            print("❌ Gemini service timeout")
-            return jsonify({
-                'success': False,
-                'error': 'Gemini analysis service timeout'
-            }), 504
-            
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Error calling Gemini service: {e}")
-            return jsonify({
-                'success': False,
-                'error': f'Could not reach Gemini service: {str(e)}'
-            }), 503
-            
-    except Exception as e:
-        print(f"Error in get_active_tabs: {e}")
+        print(f"\n📊 Analyzing {len(urls)} tabs...")
+        
+        # Get score from Gemini
+        score = analyze_tabs_with_gemini(urls)
+        
+        print(f"   Score: {score} ({(score * 100):.0f}% productive)\n")
+        
         return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
+            'success': True,
+            'average_score': score,
+            'urls_count': len(urls),
+            'timestamp': datetime.datetime.now().isoformat()
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    
 @app.route('/check_calendar_auth', methods=['GET'])
 def check_calendar_auth():
     """
@@ -576,6 +606,126 @@ def get_calendar_events():
         return jsonify({
             "status": "error",
             "error": str(e)
+        }), 500
+    
+@app.route('/get_procrastination_prediction', methods=['POST'])
+def get_procrastination_prediction():
+    """
+    Receives all collected data (music, tabs, calendar, activity)
+    and forwards to ML model for procrastination prediction.
+    """
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = FEATURE_COLUMNS
+        
+        print(f"\n🤖 Received prediction request")
+        print(f"   Features: {list(data.keys())}")
+        
+        # Forward to predict.py ML service
+        try:
+            ml_response = requests.post(
+                'http://127.0.0.1:5001/predict',
+                json=data,
+                timeout=5
+            )
+            
+            if ml_response.status_code == 200:
+                ml_data = ml_response.json()
+                prediction = ml_data.get('prediction', 0.5)
+                
+                print(f"✅ ML Prediction: {prediction:.2f}")
+                print(f"   Procrastination probability: {(prediction * 100):.0f}%\n")
+                
+                return jsonify({
+                    'success': True,
+                    'prediction': prediction,
+                    'procrastinating': prediction > 0.7,  # Threshold
+                    'timestamp': datetime.datetime.now().isoformat()
+                }), 200
+            else:
+                print(f"❌ ML service error: {ml_response.status_code}")
+                return jsonify({
+                    'success': False,
+                    'error': 'ML prediction service error'
+                }), 500
+                
+        except requests.exceptions.ConnectionError:
+            print("❌ Cannot connect to ML service at http://127.0.0.1:5000")
+            print("   Make sure predict.py is running!")
+            return jsonify({
+                'success': False,
+                'error': 'ML service not available',
+                'hint': 'Start predict.py on port 5000'
+            }), 503
+            
+        except Exception as e:
+            print(f"❌ Error calling ML service: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+            
+    except Exception as e:
+        print(f"❌ Error in prediction endpoint: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+    
+@app.route('/api/activity', methods=['GET'])
+def get_activity():
+    """API endpoint to get current activity stats"""
+    stats = keyboard_mouse.get_stats()
+    stats['timestamp'] = datetime.datetime.now().isoformat()
+    stats['is_running'] = keyboard_mouse.running
+    return jsonify(stats)
+
+
+@app.route('/api/start_activity', methods=['POST'])
+def start_activity_tracking():
+    """Start activity tracking when session starts"""
+    try:
+        if keyboard_mouse.running:
+            return jsonify({
+                "success": True,
+                "message": "keyboard_mouse already running"
+            }), 200
+        
+        keyboard_mouse.start()
+        
+        return jsonify({
+            "success": True,
+            "message": "Activity tracking started"
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"Error: {str(e)}"
+        }), 500
+
+
+@app.route('/api/stop_activity', methods=['POST'])
+def stop_activity_tracking():
+    """Stop activity tracking when session ends"""
+    try:
+        if not keyboard_mouse.running:
+            return jsonify({
+                "success": True,
+                "message": "Tracker not running"
+            }), 200
+        
+        keyboard_mouse.stop()
+        
+        return jsonify({
+            "success": True,
+            "message": "Activity tracking stopped"
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"Error: {str(e)}"
         }), 500
 
 if __name__ == '__main__':

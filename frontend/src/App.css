@@ -5,6 +5,12 @@
   text-align: center;
 }
 
+body, html {
+  background-color: pink;
+  margin: 0;
+  padding: 0;
+}
+
 .logo {
   height: 6em;
   padding: 1.5em;
@@ -16,6 +22,13 @@
 }
 .logo.react:hover {
   filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+.fjalla-one-regular {
+  font-family: "Fjalla One", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+  color: black;
 }
 
 @keyframes logo-spin {
@@ -41,11 +54,15 @@
   color: #888;
 }
 
+/* Popup styling */
 .popup {
   text-align: center;
   padding: 2rem;
+  font-family: "Fjalla One", sans-serif;
+  font-style: italic;
 }
 
+/* Authorization boxes */
 .factor {
   display: flex;
   align-items: center;
@@ -55,11 +72,11 @@
   border-radius: 12px;
   padding: 1rem 2rem;
   margin: 1rem auto;
-  width: 250px;           /* fixed width */
-  height: 120px;          /* fixed height */
+  width: 250px;
+  height: 120px;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
-  box-sizing: border-box; /* includes padding in width/height */
+  box-sizing: border-box;
 }
 
 .factor:hover {
@@ -72,6 +89,7 @@
   font-size: 1.5rem;
 }
 
+/* Fade out animation */
 @keyframes blurOutDisappear {
   0% {
     filter: blur(0);
@@ -93,5 +111,122 @@
   pointer-events: none;
 }
 
+/* Start/Stop button container */
+.factor.start-button {
+  border: none;
+  background: none;
+  box-shadow: none;
+}
+
+/* Session controls layout */
+.start-controls {
+  text-align: center;
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.running-session {
+  display: flex;
+  flex-direction: column; /* Stack timer over button */
+  align-items: center;
+  justify-content: center;
+}
+
+/* Timer styling */
+.timer {
+  font-size: 32px;
+  font-weight: bold;
+  margin-bottom: 14px; /* space above Stop button */
+  text-align: center;
+}
+
+/* Start/Stop button styling */
+.session-btn {
+  background-color: #1db954; /* Spotify green */
+  color: white;
+  border: none;
+  border-radius: 16px;
+  padding: 22px 48px;       /* Bigger button */
+  font-size: 30px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  font-family: "Fjalla One", sans-serif;
+  font-style: normal;       /* buttons not italic */
+}
+
+.session-btn:hover {
+  background-color: #17a54d;
+  transform: scale(1.05);
+}
+
+/* Stop button style */
+.stop-btn {
+  background-color: #e53935;
+}
+
+.stop-btn:hover {
+  background-color: #c62828;
+}
+
+/* Status message fade in */
+.status-message {
+  opacity: 0;
+  animation: fadeIn 0.8s ease forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.start-controls {
+  text-align: center;
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.running-session {
+  display: flex;
+  flex-direction: column; /* Stack vertically */
+  align-items: center;    /* Center horizontally */
+  justify-content: center;
+}
+
+.timer {
+  font-size: 28px;
+  font-weight: bold;
+  margin-bottom: 12px;    /* Space between timer and Stop button */
+  text-align: center;
+}
 
 
+/* Fade-in keyframes for normal status */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Special style for "locking in" */
+#locking-in {
+  font-size: 16px;                
+  font-weight: bold;
+  color: black;               
+  text-align: center;
+  animation: fadeInOut 2.5s ease-in-out infinite; /* slow fade loop */
+}
+
+/* Fade-in for other statuses */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Continuous fade in/out animation */
+@keyframes fadeInOut {
+  0%   { opacity: 0; transform: scale(0.95); }
+  50%  { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 0; transform: scale(0.95); }
+}
