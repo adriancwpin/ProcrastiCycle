@@ -125,20 +125,30 @@ class calendarClient:
     def calculate_minutes_until(self, event_time):
         """Calculate minutes until an event starts."""
         try:
-            if 'T' in event_time:  # DateTime format
-                event_dt = datetime.fromisoformat(event_time.replace('Z', '+00:00'))
-            else:  # All-day event
-                event_dt = datetime.fromisoformat(event_time)
+            # --- PROOF-OF-LIFE DEBUG PRINT ---
+            print(f"[DEBUG v2] Running corrected time calculation for event: '{event_time}'")
 
-            # ✅ FIXED: Use timezone-aware datetime
+            if 'T' in event_time:  # It's a specific time, e.g., '2025-11-03T10:00:00Z'
+                event_dt = datetime.fromisoformat(event_time.replace('Z', '+00:00'))
+            
+            else:  # It's an all-day event, e.g., '2025-11-03'
+                # BUG FIX: Make the naive datetime from an all-day event AWARE by adding UTC timezone
+                event_dt_naive = datetime.fromisoformat(event_time)
+                event_dt = event_dt_naive.replace(tzinfo=timezone.utc)
+
+            # Get the current time as a timezone-AWARE object
             now = datetime.now(timezone.utc)
             
+            # This subtraction is now 100% safe because both are AWARE
             delta = event_dt - now
-            return int(delta.total_seconds() / 60)
-        except Exception as e:
-            print(f"Error calculating time: {str(e)}")
-            return None
+            minutes = int(delta.total_seconds() / 60)
+            
+            print(f"[DEBUG v2] Successfully calculated. Starts in {minutes} minutes.")
+            return minutes
 
+        except Exception as e:
+            print(f"[DEBUG v2] CRITICAL ERROR calculating time: {str(e)}")
+            return None
     def format_events(self, events):
         """Format multiple events."""
         return [self.format_event(e) for e in events]

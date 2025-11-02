@@ -9,70 +9,12 @@ from flask_cors import CORS
 from spotify import auth
 from GC.auth import calendarAuth
 from GC.client import calendarClient
-import google.generativeai as genai
 import requests
 
 app = Flask(__name__)
 CORS(app)
 
 auth_storage = {}
-
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-
-def analyze_tabs_with_gemini(urls: list) -> float:
-    """
-    Analyze productivity of tab URLs using Gemini.
-    Returns average score between 0 and 1.
-    """
-    if not os.getenv("GOOGLE_API_KEY"):
-        print("⚠️ No Gemini API key, returning default score")
-        return 0.5
-    
-    try:
-        # Format URLs as a list
-        urls_text = "\n".join([f"- {url}" for url in urls])
-        
-        prompt = f"""Analyze these browser tabs and rate overall productivity from 0.0 to 1.0.
-
-Tabs:
-{urls_text}
-
-Scoring:
-- 0.0 = Completely unproductive (games, entertainment, social media)
-- 0.5 = Neutral (news, email, general browsing)
-- 1.0 = Highly productive (work tools, documentation, coding, learning)
-
-Return ONLY a single number between 0.0 and 1.0, nothing else.
-Example: 0.73"""
-
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
-        response = model.generate_content(prompt)
-        
-        # Extract the number
-        response_text = response.text.strip()
-        
-        # Try to parse as float
-        try:
-            score = float(response_text)
-        except ValueError:
-            # Find first number in response
-            numbers = re.findall(r'0?\.\d+|1\.0|0|1', response_text)
-            if numbers:
-                score = float(numbers[0])
-            else:
-                print(f"⚠️ Could not parse score from: {response_text}")
-                return 0.5
-        
-        # Ensure it's within bounds
-        score = max(0.0, min(1.0, score))
-        
-        print(f"✅ Productivity score: {score}")
-        return score
-        
-    except Exception as e:
-        print(f"❌ Gemini error: {e}")
-        return 0.5
-
 
 @app.route('/open_spotify', methods=['GET'])
 def start_auth():
@@ -213,6 +155,7 @@ def get_music_features():
         if currently_playing and "item" in currently_playing:
             track = currently_playing["item"]
 
+            # Get AI-generated features
             music_features = auth.analyze_track_with_gemini(
                 track['name'], 
                 track['artists'][0]['name']
@@ -250,36 +193,82 @@ def get_music_features():
     
 @app.route('/get_active_tabs', methods=['POST'])
 def get_active_tabs():
-    """Analyze tab productivity"""
+    """
+    Receives active tab URLs from Chrome extension,
+    forwards them to app.py for Gemini analysis,
+    and returns the productivity score.
+    """
     try:
         data = request.get_json()
         
         if not data or 'urls' not in data:
-            return jsonify({'success': False, 'error': 'No URLs provided'}), 400
+            return jsonify({
+                'success': False,
+                'error': 'Expected JSON with "urls" array'
+            }), 400
         
-        urls = [url for url in data['urls'] if url and isinstance(url, str)]
+        urls = data['urls']
         
-        if not urls:
-            return jsonify({'success': False, 'error': 'No valid URLs'}), 400
+        # Validate URLs
+        if not isinstance(urls, list) or len(urls) == 0:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid or empty URLs array'
+            }), 400
         
-        print(f"\n📊 Analyzing {len(urls)} tabs...")
-        
-        # Get score from Gemini
-        score = analyze_tabs_with_gemini(urls)
-        
-        print(f"   Score: {score} ({(score * 100):.0f}% productive)\n")
-        
-        return jsonify({
-            'success': True,
-            'average_score': score,
-            'urls_count': len(urls),
-            'timestamp': datetime.datetime.now().isoformat()
-        }), 200
-        
+        # Forward to app.py for Gemini analysis
+        try:
+            gemini_response = requests.post(
+                'http://127.0.0.1:5001/analyze-tabs',  # app.py endpoint
+                json={'urls': urls},
+                timeout=10
+            )
+            
+            if gemini_response.status_code == 200:
+                gemini_data = gemini_response.json()
+                average_score = gemini_data.get('average_score', 0.5)
+                
+                # Log the result
+                print(f"\n📊 Tab Analysis:")
+                print(f"   URLs analyzed: {len(urls)}")
+                print(f"   Average score: {average_score}")
+                print(f"   Timestamp: {datetime.datetime.now()}")
+                
+                # Return the score
+                return jsonify({
+                    'success': True,
+                    'average_score': average_score,
+                    'urls_count': len(urls),
+                    'timestamp': datetime.datetime.now().isoformat()
+                }), 200
+            else:
+                print(f"❌ Gemini service error: {gemini_response.status_code}")
+                return jsonify({
+                    'success': False,
+                    'error': 'Gemini analysis service error'
+                }), 500
+                
+        except requests.exceptions.Timeout:
+            print("❌ Gemini service timeout")
+            return jsonify({
+                'success': False,
+                'error': 'Gemini analysis service timeout'
+            }), 504
+            
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Error calling Gemini service: {e}")
+            return jsonify({
+                'success': False,
+                'error': f'Could not reach Gemini service: {str(e)}'
+            }), 503
+            
     except Exception as e:
-        print(f"❌ Error: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-    
+        print(f"Error in get_active_tabs: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/check_calendar_auth', methods=['GET'])
 def check_calendar_auth():
     """
@@ -539,6 +528,55 @@ def check_calendar_status():
         "message": "Calendar connected" if is_connected else "Calendar not connected"
     }), 200    
 
+@app.route('/get_calendar_events', methods=['GET'])
+@app.route('/get_calendar_events', methods=['GET'])
+def get_calendar_events():
+    print("\n📅 [DEBUG] /get_calendar_events endpoint called")
+
+    if not calendar_client.is_authenticated():
+        print("❌ Calendar not authenticated")
+        return jsonify({
+            "status": "error",
+            "error": "Google Calendar not authenticated"
+        }), 401
+    
+    try:
+        print("📅 Fetching today's events...")
+        today_result = calendar_client.get_todays_events()
+        print("📅 Fetching next event...")
+        next_event_result = calendar_client.get_next_event()
+
+        print("📅 Results fetched from client")
+
+        if today_result.get("status") == "success":
+            response = {
+                "status": "success",
+                "count": today_result["count"],
+                "events": today_result["events"]
+            }
+
+            if next_event_result.get("event"):
+                response["next_event"] = next_event_result["event"]
+                response["minutes_until"] = next_event_result.get("minutes_until")
+                print(f"✅ Found next event: {response['next_event']['summary']}")
+            else:
+                response["next_event"] = None
+                print("ℹ️ No upcoming events found")
+
+            return jsonify(response), 200
+        else:
+            print("⚠️ Failed to fetch events")
+            return jsonify({
+                "status": "error",
+                "error": "Failed to fetch events"
+            }), 500
+
+    except Exception as e:
+        print(f"❌ Exception in /get_calendar_events: {e}")
+        return jsonify({
+            "status": "error",
+            "error": str(e)
+        }), 500
 
 if __name__ == '__main__':
     print("Starting Flask server on http://127.0.0.1:8888")
