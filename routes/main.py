@@ -6,6 +6,8 @@ import webbrowser
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from spotify import auth
+from GC.auth import calendarAuth
+from GC.client import calendarClient
 
 app = Flask(__name__)
 CORS(app)
@@ -152,6 +154,97 @@ def get_track_info():
         }), 500
 
 
+#=======================================================================================================================================
+#GOOGLE CALENDAR ROUTE
+#=======================================================================================================================================
+#initialize calendar path
+calendar_auth = calendarAuth()
+calendar_client = calendarClient()
+
+@app.route('/open_calendar', methods = ['GET'])
+def start_calendar_auth():
+    result = calendar_auth.get_auth_url()
+
+    if "error" in result:
+        return jsonify(result), 400
+    
+    #Open auth URL in browser
+    webbrowser.open(result['auth_url'])
+
+    return jsonify({
+        "message" : "Opened Google Calendar auth URL",
+        "url": result['auth_url']
+    })
+
+@app.route('/calendar/callback', methods = ['GET'])
+def calendar_callback():
+    #Get full callback  URL
+    authorization_response = request.url
+
+    #Verify state
+    code = request.args.get('code')
+    error = request.args.get('error')  
+
+    if error:
+        return f"""
+        <html>
+            <body style = "text-align: center;  padding: 50px; font-family: Arial;">
+                <h1> ❌ Calendar Error</h1>
+                <p>{error}</p>
+                <p>You can close this tab.</p>
+            </body>
+        </html>
+        """, 400
+    
+    if not code:
+        return "<h1>No code received</h1>", 400
+    
+    #Exchange code for credentials
+    result = calendar_auth.handle_callback(authorization_response)
+
+    if result.get("status") == "success":
+        auth_storage['calendar_ready'] = True
+
+        try:
+            print("\n📅 --- Google Calendar Events ---")
+
+            #Get new event
+            next_event_result = calendar_client.get_next_event()
+
+            if next_event_result.get("event"):
+                event = next_event_result["event"]
+                minutes = next_event_result.get("minutes_until")
+                print(f"Next event: {event['summary']}")
+                print(f"Starts in: {minutes} minutes")
+            else:
+                print("No upcoming events")
+            
+            # Get today's events
+            today_result = calendar_client.get_todays_events()
+            if today_result.get("status") == "success":
+                print(f"Events today: {today_result['count']}")
+                for ev in today_result['events'][:5]:  # Show first 5
+                    print(f"  • {ev['summary']} at {ev['start']}")
+        except Exception as e:
+            print(f"❌ Error with Calendar: {e}")
+        
+        return """
+        <html>
+            <body style="text-align: center; padding: 50px; font-family: Arial;">
+                <h1>✅ Calendar Connected!</h1>
+                <p>Authentication complete. You can close this tab.</p>
+            </body>
+        </html>
+        """
+    else:
+        return f"""
+        <html>
+            <body style="text-align: center; padding: 50px; font-family: Arial;">
+                <h1>❌ Failed to Connect Calendar</h1>
+                <p>{result.get('message', 'Unknown error')}</p>
+            </body>
+        </html>
+        """, 400       
 
 
 if __name__ == '__main__':
