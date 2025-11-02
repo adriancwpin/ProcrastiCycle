@@ -136,7 +136,6 @@ def get_track_info():
                     "artist": track['artists'][0]['name'],
                     "id": track['id'],
                     "album": track['album']['name'] if 'album' in track else None,
-                    "image": track['album']['images'][0]['url'] if 'album' in track and track['album']['images'] else None
                 },
                 "features": music_features
             }), 200
@@ -153,6 +152,55 @@ def get_track_info():
         return jsonify({
             "error": str(e),
             "authenticated": False
+        }), 500
+    
+@app.route('/get_music_features', methods=['GET'])
+def get_music_features():
+    if 'token' not in auth_storage:
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    token = auth_storage['token']
+
+    try: 
+        currently_playing = auth.get_currently_playing(token)
+
+        if currently_playing and "item" in currently_playing:
+            track = currently_playing["item"]
+
+            # Get AI-generated features
+            music_features = auth.analyze_track_with_gemini(
+                track['name'], 
+                track['artists'][0]['name']
+            )
+
+            if music_features:
+                # Return ONLY the requested features
+                return jsonify({
+                    "success": True,
+                    "track_name": track['name'],
+                    "artist": track['artists'][0]['name'],
+                    "features": {
+                        "danceability": music_features.get('danceability', 0),
+                        "tempo": music_features.get('tempo', 0),
+                        "energy": music_features.get('energy', 0)
+                    }
+                }), 200
+            else:
+                return jsonify({
+                    "success": False,
+                    "error": "Could not generate music features"
+                }), 500
+        else:
+            return jsonify({
+                "success": False,
+                "error": "No track currently playing"
+            }), 404
+            
+    except Exception as e:
+        print(f"Error in get_music_features: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
         }), 500
 
 @app.route('/check_calendar_auth', methods=['GET'])

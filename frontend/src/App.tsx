@@ -27,6 +27,12 @@ function App() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<number | null>(null);
 
+  // Music features logger interval
+  const musicLoggerRef = useRef<number | null>(null);
+
+  // Tab logger interval
+  const tabLoggerRef = useRef<number | null>(null); // 🆕 for tab URL logging
+
   // Load visibility & stopwatch states on mount, calculate elapsedSeconds if running
   useEffect(() => {
     chrome.storage.local.get(
@@ -171,6 +177,61 @@ function App() {
           return newVal;
         });
       }, 1000);
+
+      const fetchMusicFeatures = async () => {
+        try {
+          const response = await fetch('http://127.0.0.1:8888/get_music_features');
+          
+          if (response.ok) {
+            const data = await response.json();
+            
+            if (data.success) {
+              console.log('🎵 Current Music Features:', data);
+              console.log(`Track: ${data.track_name} by ${data.artist}`);
+              console.log(`Danceability: ${data.features.danceability}`);
+              console.log(`Tempo: ${data.features.tempo}`);
+              console.log(`Energy: ${data.features.energy}`);
+              
+              // Save to chrome storage for background script or later use
+              chrome.storage.local.set({ 
+                latest_music_features: data,
+                music_features_timestamp: Date.now()
+              });
+            } else {
+              console.log('No music playing or error:', data.error);
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching music features:", err);
+        }
+      };
+
+      // Fetch immediately when session starts
+      fetchMusicFeatures();
+
+      // Then fetch every 60 seconds
+      musicLoggerRef.current = window.setInterval(fetchMusicFeatures, 60000);
+
+      // Record open tab URLs every 1 minute and send to Flask
+    tabLoggerRef.current = window.setInterval(() => {
+      chrome.tabs.query({}, async (tabs: any[]) => {
+        const urls = tabs.map((tab) => tab.url).filter(Boolean);
+
+        try {
+          const response = await fetch('http://127.0.0.1:8888/analyze-tabs', {  // Flask endpoint
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ urls }),
+          });
+          return await response.json();
+        } catch (err) {
+          console.error("Error sending tabs to Flask:", err);
+        }
+      });
+    }, 60000);
+
     } else {
       if (timerRef.current !== null) {
         clearInterval(timerRef.current);
