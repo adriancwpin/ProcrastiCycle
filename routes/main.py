@@ -98,6 +98,60 @@ def callback():
         """
     else:
         return "<h1>Failed to get token</h1>", 400
+    
+@app.route('/get_track_info', methods=['GET'])
+def get_track_info():
+    """
+    API endpoint to check if Spotify is authorized and get current track info.
+    Frontend uses this to check if authorization is complete.
+    """
+    # Check if we have a token
+    if 'token' not in auth_storage:
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    token = auth_storage['token']
+    
+    try:
+        # Get currently playing track
+        currently_playing = auth.get_currently_playing(token)
+        
+        if currently_playing and "item" in currently_playing:
+            track = currently_playing["item"]
+            
+            # Get AI-generated audio features
+            music_features = auth.analyze_track_with_gemini(
+                track['name'], 
+                track['artists'][0]['name']
+            )
+            
+            # Return track info and features
+            return jsonify({
+                "authenticated": True,
+                "track": {
+                    "name": track['name'],
+                    "artist": track['artists'][0]['name'],
+                    "id": track['id'],
+                    "album": track['album']['name'] if 'album' in track else None,
+                    "image": track['album']['images'][0]['url'] if 'album' in track and track['album']['images'] else None
+                },
+                "features": music_features
+            }), 200
+        else:
+            # No track playing, but still authenticated
+            return jsonify({
+                "authenticated": True,
+                "track": None,
+                "message": "No track currently playing"
+            }), 200
+            
+    except Exception as e:
+        print(f"Error in get_track_info: {e}")
+        return jsonify({
+            "error": str(e),
+            "authenticated": False
+        }), 500
+
+
 
 
 if __name__ == '__main__':
