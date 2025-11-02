@@ -25,10 +25,9 @@ function App() {
   // Stopwatch states
   const [isRunning, setIsRunning] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-
   const timerRef = useRef<number | null>(null);
 
-  // Load all saved states from chrome storage on mount
+  // Load visibility & stopwatch states on mount, calculate elapsedSeconds if running
   useEffect(() => {
     chrome.storage.local.get(
       [
@@ -58,20 +57,17 @@ function App() {
         setSpotifyVisible(!spotifyAuth && !spotifyPend);
         setCalendarVisible(!calendarAuth && !calendarPend);
 
-        // Load elapsed time
-        let savedElapsed = result.elapsedSeconds ?? 0;
-
-        // If stopwatch was running, calculate elapsed time including offline time
-        if (result.stopwatchRunning) {
-          const lastTimestamp = result.stopwatchLastTimestamp ?? Date.now();
-          const now = Date.now();
-          const diffSeconds = Math.floor((now - lastTimestamp) / 1000);
-          savedElapsed += diffSeconds;
+        if (result.isRunning && result.startTimestamp) {
           setIsRunning(true);
-          setElapsedSeconds(savedElapsed);
+
+          // Calculate elapsed seconds from stored startTimestamp
+          const now = Date.now();
+          const elapsed = Math.floor((now - result.startTimestamp) / 1000);
+          setElapsedSeconds(elapsed);
         } else {
+          // Not running, use stored elapsedSeconds or 0
           setIsRunning(false);
-          setElapsedSeconds(savedElapsed);
+          setElapsedSeconds(result.elapsedSeconds || 0);
         }
       }
     );
@@ -159,7 +155,7 @@ function App() {
     }
   }, [spotifyAuthorized, calendarAuthorized, spotifyVisible, calendarVisible]);
 
-  // Stopwatch timer effect
+  // Stopwatch timer effect to update elapsedSeconds every second
   useEffect(() => {
     if (isRunning) {
       chrome.storage.local.set({
@@ -186,6 +182,7 @@ function App() {
         elapsedSeconds,
       });
     }
+
     return () => {
       if (timerRef.current !== null) {
         clearInterval(timerRef.current);
