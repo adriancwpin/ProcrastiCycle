@@ -23,3 +23,51 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   }
 }, { url: [{ urlMatches: ".*" }] });
 
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Handle getTabs
+  if (message.action === "getTabs") {
+    chrome.tabs.query({}, async (tabs) => {
+      const tabData = tabs.map((tab) => ({
+        id: tab.id,
+        title: tab.title,
+        url: tab.url,
+      }));
+
+      // Send to AI backend
+      try {
+        const response = await fetch("http://127.0.0.1:8888/analyze_tabs", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ tabs: tabData }),
+        });
+
+        const result = await response.json();
+
+        console.log("AI analysis result:", result);
+        sendResponse({ tabs: tabData, aiResult: result });
+      } catch (error) {
+        console.error("Failed to send tab data to backend:", error);
+        sendResponse({ error: "Backend connection failed" });
+      }
+    });
+
+    // Return true to keep sendResponse async
+    return true;
+  }
+
+  // Start/stop session handlers (optional)
+  if (message.action === "startSession") {
+    console.log("Session started");
+    sendResponse({ success: true });
+  }
+
+  if (message.action === "stopSession") {
+    console.log("Session stopped");
+    sendResponse({ success: true });
+  }
+});
+
+
+

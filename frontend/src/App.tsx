@@ -206,6 +206,16 @@ function App() {
     chrome.runtime.sendMessage({ action: "startSession" }, (response: any) => {
       console.log("Session started:", response);
     });
+
+    // Request tabs from background script
+    chrome.runtime.sendMessage({ action: "getTabs" }, (response: any) => {
+      if (response?.tabs) {
+        response.tabs.forEach((tab: { id: any; url: any; }) => {
+          console.log(tab.id, tab.url);
+        });
+      }
+    });
+    
   };
 
   const handleStopClick = () => {
@@ -270,7 +280,7 @@ function App() {
       calendarPending: true,
       calendarVisible: false
     });
-    
+
     try {
       const res = await fetch("http://127.0.0.1:8888/open_calendar");
       if (res.ok) {
