@@ -479,6 +479,7 @@ if (chrome.webNavigation) {
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log('🚀 Procrastination Police extension installed/updated');
+  startCalendarFetching();
   
   // Check if there was an active session
   chrome.storage.local.get(['session_active', 'session_start_time'], (result) => {
@@ -494,6 +495,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.runtime.onStartup.addListener(() => {
   console.log('🔄 Browser started, extension loaded');
+  startCalendarFetching();
   
   // Resume session if it was active
   chrome.storage.local.get(['session_active', 'session_start_time'], (result) => {
