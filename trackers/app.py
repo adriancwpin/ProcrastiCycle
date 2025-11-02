@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import time
-from activity_tracker import tracker
+from trackers import tracker
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for Chrome extension

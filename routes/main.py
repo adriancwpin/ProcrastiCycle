@@ -11,6 +11,25 @@ from GC.auth import calendarAuth
 from GC.client import calendarClient
 import requests
 import google.generativeai as genai
+from trackers import keyboard_mouse
+
+FEATURE_COLUMNS = [
+    'Hour',
+    'Minute',
+    'Day of week',
+    'Keystrokes per min',
+    'Mouse moves per min',
+    'Mouse clicks per min',
+    'Productivity of Active Chrome Tabs',
+    'Total Minutes of Events Before',
+    'Total Minutes of Events After',
+    'Total Minutes to Next Event',
+    'Spotify',
+    'Danceability',
+    'Tempo',
+    'Energy',
+    'Minutes_Into_Day'
+]
 
 app = Flask(__name__)
 CORS(app)
@@ -587,6 +606,126 @@ def get_calendar_events():
         return jsonify({
             "status": "error",
             "error": str(e)
+        }), 500
+    
+@app.route('/get_procrastination_prediction', methods=['POST'])
+def get_procrastination_prediction():
+    """
+    Receives all collected data (music, tabs, calendar, activity)
+    and forwards to ML model for procrastination prediction.
+    """
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = FEATURE_COLUMNS
+        
+        print(f"\n🤖 Received prediction request")
+        print(f"   Features: {list(data.keys())}")
+        
+        # Forward to predict.py ML service
+        try:
+            ml_response = requests.post(
+                'http://127.0.0.1:5001/predict',
+                json=data,
+                timeout=5
+            )
+            
+            if ml_response.status_code == 200:
+                ml_data = ml_response.json()
+                prediction = ml_data.get('prediction', 0.5)
+                
+                print(f"✅ ML Prediction: {prediction:.2f}")
+                print(f"   Procrastination probability: {(prediction * 100):.0f}%\n")
+                
+                return jsonify({
+                    'success': True,
+                    'prediction': prediction,
+                    'procrastinating': prediction > 0.7,  # Threshold
+                    'timestamp': datetime.datetime.now().isoformat()
+                }), 200
+            else:
+                print(f"❌ ML service error: {ml_response.status_code}")
+                return jsonify({
+                    'success': False,
+                    'error': 'ML prediction service error'
+                }), 500
+                
+        except requests.exceptions.ConnectionError:
+            print("❌ Cannot connect to ML service at http://127.0.0.1:5000")
+            print("   Make sure predict.py is running!")
+            return jsonify({
+                'success': False,
+                'error': 'ML service not available',
+                'hint': 'Start predict.py on port 5000'
+            }), 503
+            
+        except Exception as e:
+            print(f"❌ Error calling ML service: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+            
+    except Exception as e:
+        print(f"❌ Error in prediction endpoint: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+    
+@app.route('/api/activity', methods=['GET'])
+def get_activity():
+    """API endpoint to get current activity stats"""
+    stats = keyboard_mouse.get_stats()
+    stats['timestamp'] = datetime.datetime.now().isoformat()
+    stats['is_running'] = keyboard_mouse.running
+    return jsonify(stats)
+
+
+@app.route('/api/start_activity', methods=['POST'])
+def start_activity_tracking():
+    """Start activity tracking when session starts"""
+    try:
+        if keyboard_mouse.running:
+            return jsonify({
+                "success": True,
+                "message": "keyboard_mouse already running"
+            }), 200
+        
+        keyboard_mouse.start()
+        
+        return jsonify({
+            "success": True,
+            "message": "Activity tracking started"
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"Error: {str(e)}"
+        }), 500
+
+
+@app.route('/api/stop_activity', methods=['POST'])
+def stop_activity_tracking():
+    """Stop activity tracking when session ends"""
+    try:
+        if not keyboard_mouse.running:
+            return jsonify({
+                "success": True,
+                "message": "Tracker not running"
+            }), 200
+        
+        keyboard_mouse.stop()
+        
+        return jsonify({
+            "success": True,
+            "message": "Activity tracking stopped"
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"Error: {str(e)}"
         }), 500
 
 if __name__ == '__main__':
