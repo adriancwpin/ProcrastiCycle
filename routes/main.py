@@ -2,6 +2,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import datetime
 import webbrowser
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -325,7 +326,142 @@ def calendar_callback():
                 <p>{result.get('message', 'Unknown error')}</p>
             </body>
         </html>
-        """, 400       
+        """, 400   
+
+@app.route('/get_calendar_analysis', methods=['GET'])
+def get_calendar_analysis():
+    """Get calendar schedule analysis for procrastination detection"""
+    if not calendar_client.is_authenticated():
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    try:
+        # Get day schedule analysis
+        day_analysis = calendar_client.get_day_schedule_analysis()
+        
+        if day_analysis.get("status") == "success":
+            # Get next event
+            next_event = calendar_client.get_next_event()
+            
+            # Build response
+            response = {
+                "success": True,
+                "date": day_analysis['date'],
+                "schedule": {
+                    "total_events": day_analysis['total_events'],
+                    "total_hours": day_analysis['total_hours'],
+                    "busy_percentage": day_analysis['busy_percentage'],
+                    "free_hours": day_analysis['free_time_hours'],
+                    "breakdown": day_analysis['breakdown']
+                }
+            }
+            
+            # Add next event if exists
+            if next_event.get("event"):
+                response["next_event"] = {
+                    "summary": next_event["event"]["summary"],
+                    "start": next_event["event"]["start"],
+                    "minutes_until": next_event.get("minutes_until")
+                }
+            else:
+                response["next_event"] = None
+            
+            return jsonify(response), 200
+        else:
+            return jsonify({
+                "success": False,
+                "error": day_analysis.get("error", "Failed to analyze schedule")
+            }), 500
+            
+    except Exception as e:
+        print(f"Error in get_calendar_analysis: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/get_next_event', methods=['GET'])
+def get_next_event_route():
+    """Get only the next upcoming event"""
+    if not calendar_client.is_authenticated():
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    try:
+        next_event_result = calendar_client.get_next_event()
+        
+        if next_event_result.get("event"):
+            event = next_event_result["event"]
+            return jsonify({
+                "success": True,
+                "event": {
+                    "summary": event["summary"],
+                    "start": event["start"],
+                    "end": event["end"],
+                    "location": event.get("location", ""),
+                    "is_all_day": event["is_all_day"]
+                },
+                "minutes_until": next_event_result.get("minutes_until")
+            }), 200
+        else:
+            return jsonify({
+                "success": False,
+                "message": "No upcoming events"
+            }), 404
+            
+    except Exception as e:
+        print(f"Error in get_next_event: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/get_today_schedule', methods=['GET'])
+def get_today_schedule():
+    """Get simplified today's schedule"""
+    if not calendar_client.is_authenticated():
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    try:
+        today_result = calendar_client.get_todays_events()
+        
+        if today_result.get("status") == "success":
+            return jsonify({
+                "success": True,
+                "count": today_result["count"],
+                "events": [
+                    {
+                        "summary": ev["summary"],
+                        "start": ev["start"],
+                        "is_all_day": ev["is_all_day"]
+                    }
+                    for ev in today_result["events"]
+                ]
+            }), 200
+        else:
+            return jsonify({
+                "success": False,
+                "error": today_result.get("error", "Failed to fetch events")
+            }), 500
+            
+    except Exception as e:
+        print(f"Error in get_today_schedule: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/check_calendar_status', methods=['GET'])
+def check_calendar_status():
+    """Check if calendar is connected (like checking Spotify auth)"""
+    is_connected = calendar_client.is_authenticated()
+    
+    return jsonify({
+        "success": True,
+        "connected": is_connected,
+        "message": "Calendar connected" if is_connected else "Calendar not connected"
+    }), 200    
 
 
 if __name__ == '__main__':
