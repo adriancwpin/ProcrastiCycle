@@ -27,9 +27,6 @@ def analyze_track_with_gemini(track_name, artist_name):
 Provide the following metrics as numbers between 0.0 and 1.0:
 - energy: How energetic/intense the song is (0=calm, 1=high energy)
 - danceability: How suitable for dancing (0=not danceable, 1=very danceable)
-- valence: How positive/happy the song feels (0=sad/negative, 1=happy/positive)
-- acousticness: How acoustic vs electronic (0=electronic, 1=acoustic)
-- instrumentalness: How instrumental vs vocal (0=very vocal, 1=purely instrumental)
 - tempo: Estimated BPM (beats per minute) as a number between 60-200
 
 Return ONLY a valid JSON object with these exact keys, no other text or explanation:

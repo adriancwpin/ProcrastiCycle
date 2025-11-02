@@ -27,6 +27,9 @@ function App() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<number | null>(null);
 
+  // Tab logger interval
+  const tabLoggerRef = useRef<number | null>(null); // 🆕 for tab URL logging
+
   // Load visibility & stopwatch states on mount, calculate elapsedSeconds if running
   useEffect(() => {
     chrome.storage.local.get(
@@ -171,6 +174,27 @@ function App() {
           return newVal;
         });
       }, 1000);
+
+      // Record open tab URLs every 1 minute and send to Flask
+    tabLoggerRef.current = window.setInterval(() => {
+      chrome.tabs.query({}, async (tabs: any[]) => {
+        const urls = tabs.map((tab) => tab.url).filter(Boolean);
+
+        try {
+          const response = await fetch('http://localhost:5000/analyze-tabs', {  // Flask endpoint
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ urls }),
+          });
+          return await response.json();
+        } catch (err) {
+          console.error("Error sending tabs to Flask:", err);
+        }
+      });
+    }, 60000);
+
     } else {
       if (timerRef.current !== null) {
         clearInterval(timerRef.current);
