@@ -542,6 +542,55 @@ def check_calendar_status():
         "message": "Calendar connected" if is_connected else "Calendar not connected"
     }), 200    
 
+@app.route('/get_calendar_events', methods=['GET'])
+@app.route('/get_calendar_events', methods=['GET'])
+def get_calendar_events():
+    print("\n📅 [DEBUG] /get_calendar_events endpoint called")
+
+    if not calendar_client.is_authenticated():
+        print("❌ Calendar not authenticated")
+        return jsonify({
+            "status": "error",
+            "error": "Google Calendar not authenticated"
+        }), 401
+    
+    try:
+        print("📅 Fetching today's events...")
+        today_result = calendar_client.get_todays_events()
+        print("📅 Fetching next event...")
+        next_event_result = calendar_client.get_next_event()
+
+        print("📅 Results fetched from client")
+
+        if today_result.get("status") == "success":
+            response = {
+                "status": "success",
+                "count": today_result["count"],
+                "events": today_result["events"]
+            }
+
+            if next_event_result.get("event"):
+                response["next_event"] = next_event_result["event"]
+                response["minutes_until"] = next_event_result.get("minutes_until")
+                print(f"✅ Found next event: {response['next_event']['summary']}")
+            else:
+                response["next_event"] = None
+                print("ℹ️ No upcoming events found")
+
+            return jsonify(response), 200
+        else:
+            print("⚠️ Failed to fetch events")
+            return jsonify({
+                "status": "error",
+                "error": "Failed to fetch events"
+            }), 500
+
+    except Exception as e:
+        print(f"❌ Exception in /get_calendar_events: {e}")
+        return jsonify({
+            "status": "error",
+            "error": str(e)
+        }), 500
 
 if __name__ == '__main__':
     print("Starting Flask server on http://127.0.0.1:8888")

@@ -95,6 +95,7 @@ function startSession() {
   
   // Start fetching music features
   startMusicFeaturesFetching();
+  startCalendarFetching();
   
   // Show notification
   if (chrome.notifications) {
@@ -127,6 +128,7 @@ function stopSession() {
   
   // Stop music features
   stopMusicFeaturesFetching();
+  stopCalendarFetching();
   
   // Save to storage
   chrome.storage.local.set({ 
@@ -347,6 +349,78 @@ async function fetchMusicFeatures() {
     console.error('❌ Error fetching music features:', error);
   }
 }
+
+//=========================================================================================
+// CALENDAR
+//========================================================================================
+//=========================================================================================
+// CALENDAR FUNCTIONS
+//========================================================================================
+// ============================================
+// GOOGLE CALENDAR FETCHING
+// ============================================
+
+let calendarInterval = null;
+
+function startCalendarFetching() {
+  console.log('📅 Starting Google Calendar monitoring...');
+
+  fetchCalendarEvents(); // fetch immediately
+
+  // Fetch every 5 minutes (300000 ms)
+  calendarInterval = setInterval(() => {
+    fetchCalendarEvents();
+  }, 300000);
+}
+
+function stopCalendarFetching() {
+  if (calendarInterval) {
+    clearInterval(calendarInterval);
+    calendarInterval = null;
+    console.log('🛑 Stopped Google Calendar monitoring');
+  }
+}
+
+async function fetchCalendarEvents() {
+  const timestamp = new Date().toLocaleTimeString();
+  console.log(`\n📅 [${timestamp}] Fetching calendar events...`);
+
+  try {
+    const response = await fetch('http://127.0.0.1:8888/get_calendar_events');
+    const data = await response.json();
+
+    if (response.ok && data.status === 'success') {
+      console.log(`✅ Retrieved ${data.count} calendar events`);
+      
+      // Store in local storage
+      chrome.storage.local.get(['calendar_history'], (result) => {
+        const history = result.calendar_history || [];
+        history.push({
+          events: data.events,
+          count: data.count,
+          timestamp: Date.now(),
+          time_string: timestamp
+        });
+
+        if (history.length > 50) history.shift();
+
+        chrome.storage.local.set({
+          latest_calendar_events: data,
+          calendar_history: history
+        });
+      });
+    } else {
+      console.log(`⚠️ Calendar error: ${data.error || 'Unknown'}`);
+      chrome.storage.local.set({
+        latest_calendar_events: null,
+        calendar_last_error: data.error || 'No data'
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error fetching calendar events:', error);
+  }
+}
+
 
 // ============================================
 // WEB NAVIGATION MONITORING
