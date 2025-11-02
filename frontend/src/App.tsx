@@ -5,6 +5,13 @@ import { faCalendarDays } from "@fortawesome/free-solid-svg-icons";
 import "./App.css";
 declare const chrome: any;
 
+interface ActivityData {
+  keystrokes_per_minute: number;
+  mouse_moves_per_minute: number;
+  mouse_clicks_per_minute: number;
+  timestamp: number;
+}
+
 function App() {
   const [status, setStatus] = useState<string>("");
 
@@ -22,6 +29,16 @@ function App() {
   // Session & Timer states (read from background)
   const [isRunning, setIsRunning] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const timerRef = useRef<number | null>(null);
+
+  // Music features logger interval
+  const musicLoggerRef = useRef<number | null>(null);
+
+  // Tab logger interval
+  const tabLoggerRef = useRef<number | null>(null); // for tab URL logging
+
+  // 🆕 Activity tracking interval
+  const activityLoggerRef = useRef<number | null>(null);
 
   // Load states on mount
   useEffect(() => {
@@ -154,7 +171,161 @@ function App() {
     } else {
       setStartVisible(false);
     }
-  }, [spotifyAuthorized, calendarAuthorized, spotifyVisible, calendarVisible, isRunning]);
+  }, [spotifyAuthorized, calendarAuthorized, spotifyVisible, calendarVisible]);
+
+  // 🆕 Function to fetch activity data from Flask API
+  const fetchActivityData = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/activity');
+      
+      if (response.ok) {
+        const data: ActivityData = await response.json();
+        
+        // Log to console
+        console.log('⌨️ Activity Data:', {
+          keystrokes: data.keystrokes_per_minute,
+          mouse_moves: data.mouse_moves_per_minute,
+          mouse_clicks: data.mouse_clicks_per_minute,
+          timestamp: new Date(data.timestamp * 1000).toLocaleTimeString()
+        });
+        
+        // Save to chrome storage for later use
+        chrome.storage.local.set({ 
+          latest_activity_data: data,
+          activity_data_timestamp: Date.now()
+        });
+
+      } else {
+        console.error('Failed to fetch activity data');
+      }
+    } catch (err) {
+      console.error("Error fetching activity data:", err);
+    }
+  };
+
+  // Stopwatch timer effect to update elapsedSeconds every second
+  useEffect(() => {
+    if (isRunning) {
+      chrome.storage.local.set({
+        stopwatchRunning: true,
+        stopwatchLastTimestamp: Date.now(),
+        elapsedSeconds,
+      });
+
+      timerRef.current = window.setInterval(() => {
+        setElapsedSeconds((prev) => {
+          const newVal = prev + 1;
+          chrome.storage.local.set({ elapsedSeconds: newVal, stopwatchLastTimestamp: Date.now() });
+          return newVal;
+        });
+      }, 1000);
+
+      const fetchMusicFeatures = async () => {
+        try {
+          const response = await fetch('http://127.0.0.1:8888/get_music_features');
+          
+          if (response.ok) {
+            const data = await response.json();
+            
+            if (data.success) {
+              console.log('🎵 Current Music Features:', data);
+              console.log(`Track: ${data.track_name} by ${data.artist}`);
+              console.log(`Danceability: ${data.features.danceability}`);
+              console.log(`Tempo: ${data.features.tempo}`);
+              console.log(`Energy: ${data.features.energy}`);
+              
+              // Save to chrome storage for background script or later use
+              chrome.storage.local.set({ 
+                latest_music_features: data,
+                music_features_timestamp: Date.now()
+              });
+            } else {
+              console.log('No music playing or error:', data.error);
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching music features:", err);
+        }
+      };
+
+      // Fetch immediately when session starts
+      fetchMusicFeatures();
+
+      // Then fetch every 60 seconds
+      musicLoggerRef.current = window.setInterval(fetchMusicFeatures, 60000);
+
+      // Record open tab URLs every 1 minute and send to Flask
+    tabLoggerRef.current = window.setInterval(() => {
+      chrome.tabs.query({}, async (tabs: any[]) => {
+        const urls = tabs.map((tab) => tab.url).filter(Boolean);
+
+        try {
+          const response = await fetch('http://127.0.0.1:8888/analyze-tabs', {  // Flask endpoint
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ urls }),
+          });
+          return await response.json();
+        } catch (err) {
+          console.error("Error sending tabs to Flask:", err);
+        }
+      });
+    }, 60000);
+
+    // 🆕 Fetch activity data immediately when session starts
+      fetchActivityData();
+
+    // 🆕 Then fetch every 60 seconds (1 minute)
+    activityLoggerRef.current = window.setInterval(fetchActivityData, 60000);
+
+    } else {
+      // Stop all timers
+      if (timerRef.current !== null) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      
+      if (musicLoggerRef.current !== null) {
+        clearInterval(musicLoggerRef.current);
+        musicLoggerRef.current = null;
+      }
+
+      if (tabLoggerRef.current !== null) {
+        clearInterval(tabLoggerRef.current);
+        tabLoggerRef.current = null;
+      }
+
+      // 🆕 Stop activity tracking
+      if (activityLoggerRef.current !== null) {
+        clearInterval(activityLoggerRef.current);
+        activityLoggerRef.current = null;
+      }
+
+      chrome.storage.local.set({
+        stopwatchRunning: false,
+        stopwatchLastTimestamp: null,
+        elapsedSeconds,
+      });
+    }
+
+    return () => {
+      if (timerRef.current !== null) {
+        clearInterval(timerRef.current);
+      }
+      if (musicLoggerRef.current !== null) {
+        clearInterval(musicLoggerRef.current);
+      }
+      if (tabLoggerRef.current !== null) {
+        clearInterval(tabLoggerRef.current);
+      }
+      // 🆕 Cleanup activity tracker
+      if (activityLoggerRef.current !== null) {
+        clearInterval(activityLoggerRef.current);
+      }
+    };
+  }, [isRunning, elapsedSeconds]);
 
   const formatTime = (totalSeconds: number) => {
     const minutes = Math.floor(totalSeconds / 60);
