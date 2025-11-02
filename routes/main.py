@@ -100,6 +100,8 @@ def callback():
         """
     else:
         return "<h1>Failed to get token</h1>", 400
+
+
     
 @app.route('/get_track_info', methods=['GET'])
 def get_track_info():
@@ -153,7 +155,38 @@ def get_track_info():
             "authenticated": False
         }), 500
 
+@app.route('/check_calendar_auth', methods=['GET'])
+def check_calendar_auth():
+    """
+    Frontend endpoint: checks if Google Calendar is authenticated.
+    Returns 200 if valid token, 401 if missing/invalid.
+    """
+    try:
+        token_path = calendar_auth.token 
 
+        if not os.path.exists(token_path):
+            return jsonify({
+                "authenticated": False,
+                "message": "No calendar token found"
+            }), 401
+
+        if calendar_auth.is_authenticated():
+            return jsonify({
+                "authenticated": True,
+                "message": "Google Calendar connected"
+            }), 200
+        else:
+            return jsonify({
+                "authenticated": False,
+                "message": "Token invalid or expired"
+            }), 401
+
+    except Exception as e:
+        print(f"❌ Error checking calendar auth: {e}")
+        return jsonify({
+            "authenticated": False,
+            "error": str(e)
+        }), 500
 #=======================================================================================================================================
 #GOOGLE CALENDAR ROUTE
 #=======================================================================================================================================
