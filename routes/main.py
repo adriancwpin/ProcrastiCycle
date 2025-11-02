@@ -233,7 +233,7 @@ def get_active_tabs():
         # Forward to app.py for Gemini analysis
         try:
             gemini_response = requests.post(
-                'http://127.0.0.1:5000/analyze-tabs',  # app.py endpoint
+                'http://127.0.0.1:5001/analyze-tabs',  # app.py endpoint
                 json={'urls': urls},
                 timeout=10
             )
