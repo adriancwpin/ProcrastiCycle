@@ -14,6 +14,10 @@ CORS(app)
 
 auth_storage = {}
 
+#initialize calendar path
+calendar_auth = calendarAuth()
+calendar_client = calendarClient()
+
 @app.route('/open_spotify', methods=['GET'])
 def start_auth():
     auth_url = auth.get_auth_url()
@@ -102,6 +106,40 @@ def callback():
         return "<h1>Failed to get token</h1>", 400
 
 
+@app.route('/check_calendar_auth', methods=['GET'])
+def check_calendar_auth():
+    """
+    Frontend endpoint: checks if Google Calendar is authenticated.
+    Returns 200 if valid token, 401 if missing/invalid.
+    """
+    try:
+        token_path = calendar_auth.token 
+
+        if not os.path.exists(token_path):
+            return jsonify({
+                "authenticated": False,
+                "message": "No calendar token found"
+            }), 401
+
+        if calendar_auth.is_authenticated():
+            return jsonify({
+                "authenticated": True,
+                "message": "Google Calendar connected"
+            }), 200
+        else:
+            return jsonify({
+                "authenticated": False,
+                "message": "Token invalid or expired"
+            }), 401
+
+    except Exception as e:
+        print(f"❌ Error checking calendar auth: {e}")
+        return jsonify({
+            "authenticated": False,
+            "error": str(e)
+        }), 500
+
+
 @app.route('/get_track_info', methods=['GET'])
 def get_track_info():
     """
@@ -149,51 +187,10 @@ def get_track_info():
             "spotify_authenticated": False
         }), 500
 
-    # ============================================================
-    # 📅 2️⃣ GOOGLE CALENDAR TOKEN CHECK
-    # ============================================================
-    try:
-        token_path = getattr(calendar_auth, "token", None)
-        token_exists = os.path.exists(token_path) if token_path else False
-
-        if not token_exists:
-            # Token file missing → Not authenticated
-            return jsonify({
-                **response,
-                "calendar_authenticated": False,
-                "calendar_token": {
-                    "path": token_path,
-                    "exists": False
-                },
-                "message": "Google Calendar not authenticated"
-            }), 401
-
-        # Token exists → Authenticated
-        return jsonify({
-            **response,
-            "calendar_authenticated": True,
-            "calendar_token": {
-                "path": token_path,
-                "exists": True
-            }
-        }), 200
-
-    except Exception as e:
-        print(f"❌ Error checking calendar token: {e}")
-        return jsonify({
-            **response,
-            "calendar_authenticated": False,
-            "error": str(e)
-        }), 500
-
-
-
+    
 #=======================================================================================================================================
 #GOOGLE CALENDAR ROUTE
 #=======================================================================================================================================
-#initialize calendar path
-calendar_auth = calendarAuth()
-calendar_client = calendarClient()
 
 @app.route('/open_calendar', methods = ['GET'])
 def start_calendar_auth():
