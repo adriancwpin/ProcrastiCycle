@@ -416,6 +416,21 @@ async function fetchCalendarEvents() {
 
     if (response.ok && data.status === 'success') {
       console.log(`✅ Retrieved ${data.count} calendar events`);
+
+      if (response.ok && data.status === 'success') {
+        console.log(`✅ Retrieved ${data.count} calendar events`);
+
+        if (data.next_event) {
+          console.log(`📅 Next event: ${data.next_event.summary}`);
+          if (data.minutes_until !== undefined)
+            console.log(`⏰ Starts in: ${data.minutes_until} minutes`);
+        } else {
+            console.log("ℹ️ No upcoming events found");
+        }
+
+  // (keep your chrome.storage.local saving code here)
+}
+
       
       // Store in local storage
       chrome.storage.local.get(['calendar_history'], (result) => {
@@ -479,7 +494,6 @@ if (chrome.webNavigation) {
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log('🚀 Procrastination Police extension installed/updated');
-  startCalendarFetching();
   
   // Check if there was an active session
   chrome.storage.local.get(['session_active', 'session_start_time'], (result) => {
@@ -495,7 +509,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.runtime.onStartup.addListener(() => {
   console.log('🔄 Browser started, extension loaded');
-  startCalendarFetching();
+ 
   
   // Resume session if it was active
   chrome.storage.local.get(['session_active', 'session_start_time'], (result) => {
